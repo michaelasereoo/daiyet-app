@@ -1,3 +1,0 @@
-module.exports=[32618,a=>{a.v({className:"inter_c15e96cb-module__0bjUvq__className",variable:"inter_c15e96cb-module__0bjUvq__variable"})},40160,a=>{"use strict";var b=a.i(11733),c=a.i(32618);let d={className:c.default.className,style:{fontFamily:"'Inter', 'Inter Fallback'",fontStyle:"normal"}};function e({children:a}){return(0,b.jsx)("html",{lang:"en",children:(0,b.jsx)("body",{className:`${d.variable} font-sans antialiased`,children:a})})}null!=c.default.variable&&(d.variable=c.default.variable),a.s(["default",()=>e,"metadata",0,{title:"Daiyet - Book a Dietitian",description:"Book appointments with certified dietitians in Nigeria"}],40160)}];
-
-//# sourceMappingURL=%5Broot-of-the-server%5D__e73f6c53._.js.map

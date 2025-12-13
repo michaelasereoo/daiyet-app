@@ -13,13 +13,136 @@
       "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
     }
   ],
-  "headers": [],
+  "headers": [
+    {
+      "source": "/:path*",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://checkout.paystack.com https://*.paystack.com https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://checkout.paystack.com https://paystack.com https://*.paystack.com; font-src 'self' https://checkout.paystack.com https://fonts.gstatic.com https://fonts.googleapis.com data:; img-src 'self' https://checkout.paystack.com https://*.paystack.com https://lh3.googleusercontent.com data: blob:; connect-src 'self' https://api.paystack.co https://checkout.paystack.com https://*.paystack.com https://*.supabase.co https://*.supabase.io wss://*.supabase.co wss://*.supabase.io https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com; frame-src 'self' https://checkout.paystack.com https://*.paystack.com https://accounts.google.com; child-src 'self' https://checkout.paystack.com https://*.paystack.com https://accounts.google.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.paystack.com"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ],
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))?(?:/)?$"
+    }
+  ],
   "rewrites": {
     "beforeFiles": [],
     "afterFiles": [],
     "fallback": []
   },
   "dynamicRoutes": [
+    {
+      "page": "/api/availability/out-of-office/[id]",
+      "regex": "^/api/availability/out\\-of\\-office/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/availability/out\\-of\\-office/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/availability/overrides/[id]",
+      "regex": "^/api/availability/overrides/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/availability/overrides/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/availability/[id]",
+      "regex": "^/api/availability/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/availability/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/bookings/[id]",
+      "regex": "^/api/bookings/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/bookings/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/bookings/[id]/generate-meet-link",
+      "regex": "^/api/bookings/([^/]+?)/generate\\-meet\\-link(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/bookings/(?<nxtPid>[^/]+?)/generate\\-meet\\-link(?:/)?$"
+    },
+    {
+      "page": "/api/dietitians/[id]",
+      "regex": "^/api/dietitians/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/dietitians/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/event-types/[id]",
+      "regex": "^/api/event\\-types/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/event\\-types/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/meal-plans/[id]",
+      "regex": "^/api/meal\\-plans/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/meal\\-plans/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/session-request/[id]",
+      "regex": "^/api/session\\-request/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/session\\-request/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/user/approve-request/[id]",
+      "regex": "^/api/user/approve\\-request/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/user/approve\\-request/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/user/dietitian/[id]",
+      "regex": "^/api/user/dietitian/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/user/dietitian/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/user/reschedule-booking/[id]",
+      "regex": "^/api/user/reschedule\\-booking/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/user/reschedule\\-booking/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/user/session-requests/[id]/reject",
+      "regex": "^/api/user/session\\-requests/([^/]+?)/reject(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/user/session\\-requests/(?<nxtPid>[^/]+?)/reject(?:/)?$"
+    },
     {
       "page": "/book/[dietitian]",
       "regex": "^/book/([^/]+?)(?:/)?$",
@@ -35,6 +158,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/dashboard/availability/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/dashboard/event-types/[id]",
+      "regex": "^/dashboard/event\\-types/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/dashboard/event\\-types/(?<nxtPid>[^/]+?)(?:/)?$"
     }
   ],
   "staticRoutes": [
@@ -75,10 +206,22 @@
       "namedRegex": "^/admin/bookings(?:/)?$"
     },
     {
+      "page": "/admin/create-users",
+      "regex": "^/admin/create\\-users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/create\\-users(?:/)?$"
+    },
+    {
       "page": "/admin/dietitians",
       "regex": "^/admin/dietitians(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/admin/dietitians(?:/)?$"
+    },
+    {
+      "page": "/admin/fix-dietitian",
+      "regex": "^/admin/fix\\-dietitian(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/fix\\-dietitian(?:/)?$"
     },
     {
       "page": "/admin/meal-plans",
@@ -91,6 +234,12 @@
       "regex": "^/admin/payouts(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/admin/payouts(?:/)?$"
+    },
+    {
+      "page": "/admin/quick-fix",
+      "regex": "^/admin/quick\\-fix(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/quick\\-fix(?:/)?$"
     },
     {
       "page": "/admin/revenue",
@@ -111,6 +260,12 @@
       "namedRegex": "^/admin/settings/pricing(?:/)?$"
     },
     {
+      "page": "/admin/test-emails",
+      "regex": "^/admin/test\\-emails(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/test\\-emails(?:/)?$"
+    },
+    {
       "page": "/admin/users",
       "regex": "^/admin/users(?:/)?$",
       "routeKeys": {},
@@ -121,6 +276,36 @@
       "regex": "^/admin\\-login(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/admin\\-login(?:/)?$"
+    },
+    {
+      "page": "/api/admin/check-user",
+      "regex": "^/api/admin/check\\-user(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/check\\-user(?:/)?$"
+    },
+    {
+      "page": "/api/admin/create-users",
+      "regex": "^/api/admin/create\\-users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/create\\-users(?:/)?$"
+    },
+    {
+      "page": "/api/admin/fix-dietitian",
+      "regex": "^/api/admin/fix\\-dietitian(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/fix\\-dietitian(?:/)?$"
+    },
+    {
+      "page": "/api/admin/generate-meeting-links",
+      "regex": "^/api/admin/generate\\-meeting\\-links(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/generate\\-meeting\\-links(?:/)?$"
+    },
+    {
+      "page": "/api/admin/test-email",
+      "regex": "^/api/admin/test\\-email(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/test\\-email(?:/)?$"
     },
     {
       "page": "/api/auth/google/authorize",
@@ -135,16 +320,172 @@
       "namedRegex": "^/api/auth/google/callback(?:/)?$"
     },
     {
+      "page": "/api/availability",
+      "regex": "^/api/availability(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/availability(?:/)?$"
+    },
+    {
+      "page": "/api/availability/out-of-office",
+      "regex": "^/api/availability/out\\-of\\-office(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/availability/out\\-of\\-office(?:/)?$"
+    },
+    {
+      "page": "/api/availability/overrides",
+      "regex": "^/api/availability/overrides(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/availability/overrides(?:/)?$"
+    },
+    {
+      "page": "/api/availability/timeslots",
+      "regex": "^/api/availability/timeslots(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/availability/timeslots(?:/)?$"
+    },
+    {
+      "page": "/api/availability/toggle-all",
+      "regex": "^/api/availability/toggle\\-all(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/availability/toggle\\-all(?:/)?$"
+    },
+    {
       "page": "/api/bookings",
       "regex": "^/api/bookings(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/bookings(?:/)?$"
     },
     {
+      "page": "/api/bookings/stream",
+      "regex": "^/api/bookings/stream(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/bookings/stream(?:/)?$"
+    },
+    {
+      "page": "/api/check-enrollment",
+      "regex": "^/api/check\\-enrollment(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/check\\-enrollment(?:/)?$"
+    },
+    {
+      "page": "/api/dashboard/stats",
+      "regex": "^/api/dashboard/stats(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/dashboard/stats(?:/)?$"
+    },
+    {
+      "page": "/api/debug/auth",
+      "regex": "^/api/debug/auth(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/auth(?:/)?$"
+    },
+    {
+      "page": "/api/debug/cookies",
+      "regex": "^/api/debug/cookies(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/cookies(?:/)?$"
+    },
+    {
+      "page": "/api/debug/timeslots",
+      "regex": "^/api/debug/timeslots(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/timeslots(?:/)?$"
+    },
+    {
+      "page": "/api/debug/timezone",
+      "regex": "^/api/debug/timezone(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/timezone(?:/)?$"
+    },
+    {
+      "page": "/api/debug/timezone-basic",
+      "regex": "^/api/debug/timezone\\-basic(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/timezone\\-basic(?:/)?$"
+    },
+    {
+      "page": "/api/debug/timezone-simple",
+      "regex": "^/api/debug/timezone\\-simple(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/timezone\\-simple(?:/)?$"
+    },
+    {
+      "page": "/api/debug/user",
+      "regex": "^/api/debug/user(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/user(?:/)?$"
+    },
+    {
+      "page": "/api/dietitians",
+      "regex": "^/api/dietitians(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/dietitians(?:/)?$"
+    },
+    {
+      "page": "/api/dietitians/check-email",
+      "regex": "^/api/dietitians/check\\-email(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/dietitians/check\\-email(?:/)?$"
+    },
+    {
+      "page": "/api/dietitians/enroll",
+      "regex": "^/api/dietitians/enroll(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/dietitians/enroll(?:/)?$"
+    },
+    {
+      "page": "/api/email/process",
+      "regex": "^/api/email/process(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/email/process(?:/)?$"
+    },
+    {
+      "page": "/api/event-types",
+      "regex": "^/api/event\\-types(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/event\\-types(?:/)?$"
+    },
+    {
+      "page": "/api/fix-user",
+      "regex": "^/api/fix\\-user(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/fix\\-user(?:/)?$"
+    },
+    {
+      "page": "/api/health",
+      "regex": "^/api/health(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/health(?:/)?$"
+    },
+    {
+      "page": "/api/meal-plans",
+      "regex": "^/api/meal\\-plans(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/meal\\-plans(?:/)?$"
+    },
+    {
+      "page": "/api/meal-plans/stream",
+      "regex": "^/api/meal\\-plans/stream(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/meal\\-plans/stream(?:/)?$"
+    },
+    {
+      "page": "/api/meal-plans/upload",
+      "regex": "^/api/meal\\-plans/upload(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/meal\\-plans/upload(?:/)?$"
+    },
+    {
       "page": "/api/payments/verify",
       "regex": "^/api/payments/verify(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/payments/verify(?:/)?$"
+    },
+    {
+      "page": "/api/paystack/callback",
+      "regex": "^/api/paystack/callback(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/paystack/callback(?:/)?$"
     },
     {
       "page": "/api/paystack/initialize",
@@ -159,10 +500,94 @@
       "namedRegex": "^/api/paystack/webhook(?:/)?$"
     },
     {
+      "page": "/api/session-request",
+      "regex": "^/api/session\\-request(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/session\\-request(?:/)?$"
+    },
+    {
+      "page": "/api/session-request/clients",
+      "regex": "^/api/session\\-request/clients(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/session\\-request/clients(?:/)?$"
+    },
+    {
+      "page": "/api/session-requests/stream",
+      "regex": "^/api/session\\-requests/stream(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/session\\-requests/stream(?:/)?$"
+    },
+    {
+      "page": "/api/test-auth/check-cookies",
+      "regex": "^/api/test\\-auth/check\\-cookies(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/test\\-auth/check\\-cookies(?:/)?$"
+    },
+    {
+      "page": "/api/test-auth/debug-storage",
+      "regex": "^/api/test\\-auth/debug\\-storage(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/test\\-auth/debug\\-storage(?:/)?$"
+    },
+    {
+      "page": "/api/test-auth/test-exchange",
+      "regex": "^/api/test\\-auth/test\\-exchange(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/test\\-auth/test\\-exchange(?:/)?$"
+    },
+    {
+      "page": "/api/user/booking-history",
+      "regex": "^/api/user/booking\\-history(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/user/booking\\-history(?:/)?$"
+    },
+    {
+      "page": "/api/user/disconnect-google-calendar",
+      "regex": "^/api/user/disconnect\\-google\\-calendar(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/user/disconnect\\-google\\-calendar(?:/)?$"
+    },
+    {
+      "page": "/api/user/google-calendar-status",
+      "regex": "^/api/user/google\\-calendar\\-status(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/user/google\\-calendar\\-status(?:/)?$"
+    },
+    {
+      "page": "/api/user/profile",
+      "regex": "^/api/user/profile(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/user/profile(?:/)?$"
+    },
+    {
+      "page": "/api/user/session-requests",
+      "regex": "^/api/user/session\\-requests(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/user/session\\-requests(?:/)?$"
+    },
+    {
+      "page": "/api/user/upload-profile-image",
+      "regex": "^/api/user/upload\\-profile\\-image(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/user/upload\\-profile\\-image(?:/)?$"
+    },
+    {
+      "page": "/api/users/by-email",
+      "regex": "^/api/users/by\\-email(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/users/by\\-email(?:/)?$"
+    },
+    {
       "page": "/auth/callback",
       "regex": "^/auth/callback(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/auth/callback(?:/)?$"
+    },
+    {
+      "page": "/auth/error",
+      "regex": "^/auth/error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/auth/error(?:/)?$"
     },
     {
       "page": "/bookings",
@@ -229,6 +654,12 @@
       "regex": "^/dashboard/meal\\-plan(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/dashboard/meal\\-plan(?:/)?$"
+    },
+    {
+      "page": "/dashboard/session-request",
+      "regex": "^/dashboard/session\\-request(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/dashboard/session\\-request(?:/)?$"
     },
     {
       "page": "/dashboard/settings",
@@ -307,6 +738,18 @@
       "regex": "^/terms\\-of\\-service(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/terms\\-of\\-service(?:/)?$"
+    },
+    {
+      "page": "/test-auth",
+      "regex": "^/test\\-auth(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/test\\-auth(?:/)?$"
+    },
+    {
+      "page": "/test-auth/callback",
+      "regex": "^/test\\-auth/callback(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/test\\-auth/callback(?:/)?$"
     },
     {
       "page": "/user-dashboard",

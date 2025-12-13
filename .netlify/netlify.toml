@@ -2,7 +2,7 @@ headersOrigin = "inline"
 redirectsOrigin = "inline"
 
 [images]
-remote_images = ["^(?:https:\\/\\/images\\.unsplash\\.com(?:\\/(?!\\.)(?:(?:(?!(?:^|\\/)\\.).)*?)|$))$"]
+remote_images = ["^(?:https:\\/\\/images\\.unsplash\\.com(?:\\/(?!\\.)(?:(?:(?!(?:^|\\/)\\.).)*?)|$))$", "^(?:https:\\/\\/lh3\\.googleusercontent\\.com(?:\\/(?!\\.)(?:(?:(?!(?:^|\\/)\\.).)*?)|$))$"]
 
 [functions]
 

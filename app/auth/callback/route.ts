@@ -20,6 +20,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
+  // Use NEXT_PUBLIC_SITE_URL if available (for production), otherwise use request origin
+  const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL 
+    ? new URL(process.env.NEXT_PUBLIC_SITE_URL).origin 
+    : requestUrl.origin;
   const { code, error: oauthError, error_description } = Object.fromEntries(requestUrl.searchParams);
 
   // STEP 1: Handle OAuth errors FIRST
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       new URL(
         `/auth/error?code=${oauthError}&desc=${encodeURIComponent(error_description || "")}`,
-        requestUrl.origin
+        siteOrigin
       )
     );
   }
@@ -45,7 +49,7 @@ export async function GET(request: NextRequest) {
       requestUrl: requestUrl.toString(),
       timestamp: new Date().toISOString(),
     });
-    return NextResponse.redirect(new URL("/auth/signin", requestUrl.origin));
+    return NextResponse.redirect(new URL("/auth/signin", siteOrigin));
   }
 
   try {
@@ -58,7 +62,7 @@ export async function GET(request: NextRequest) {
         timestamp: new Date().toISOString(),
       });
       return NextResponse.redirect(
-        new URL("/auth/error?type=rate_limit", requestUrl.origin)
+        new URL("/auth/error?type=rate_limit", siteOrigin)
       );
     }
 
@@ -264,7 +268,7 @@ export async function GET(request: NextRequest) {
         timestamp: new Date().toISOString(),
       });
       const redirectTo = "/dashboard";
-      const response = NextResponse.redirect(new URL(redirectTo, requestUrl.origin));
+      const response = NextResponse.redirect(new URL(redirectTo, siteOrigin));
       response.headers.set("X-Auth-Status", "success");
       return response;
     }
@@ -278,7 +282,7 @@ export async function GET(request: NextRequest) {
         timestamp: new Date().toISOString(),
       });
       const redirectTo = "/dietitian-enrollment";
-      const response = NextResponse.redirect(new URL(redirectTo, requestUrl.origin));
+      const response = NextResponse.redirect(new URL(redirectTo, siteOrigin));
       response.headers.set("X-Auth-Status", "success");
       return response;
     }
@@ -313,7 +317,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Create response with security headers
-    const response = NextResponse.redirect(new URL(redirectTo, requestUrl.origin));
+    const response = NextResponse.redirect(new URL(redirectTo, siteOrigin));
     
     // Security headers
     response.headers.set("X-Auth-Status", "success");
@@ -336,7 +340,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Redirect to error page with sanitized error
-    const errorUrl = new URL("/auth/error", request.url);
+    const errorUrl = new URL("/auth/error", siteOrigin);
     errorUrl.searchParams.set("type", "callback_error");
 
     const response = NextResponse.redirect(errorUrl);
