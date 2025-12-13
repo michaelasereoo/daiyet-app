@@ -1,87 +1,222 @@
-"use client";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server/client";
+import { createAdminClientServer } from "@/lib/supabase/server";
+import DashboardClient, {
+  type DashboardStats,
+  type Booking,
+} from "./DashboardClient";
 
-import { useState } from "react";
-import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
-import { BookingsList } from "@/components/bookings/BookingsList";
+export default async function DashboardPage() {
+  try {
+    const supabaseAdmin = createAdminClientServer();
+    
+    // 1. Check authentication (server-side) - Using getUser() which is more reliable than getSession()
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-// Mock data - in production, fetch from API
-const mockUpcomingBookings = [
-  {
-    id: "1",
-    date: new Date("2024-12-17"),
-    startTime: new Date("2024-12-17T02:00:00"),
-    endTime: new Date("2024-12-17T02:45:00"),
-    title: "1-on-1 with a Licensed Dietician",
-    description: "1-on-1 with a Licensed Dietician between Daiyet.com and Michael Opeyemi",
-    message: "I just want to understand my diet",
-    participants: ["You", "Michael Opeyemi"],
-    meetingLink: "https://meet.google.com/abc-defg-hij",
-  },
-  {
-    id: "2",
-    date: new Date("2024-12-22"),
-    startTime: new Date("2024-12-22T12:00:00"),
-    endTime: new Date("2024-12-22T12:30:00"),
-    title: "Chat with a Dietician",
-    description: "Chat with a Dietician between Official Daiyet App and Opeyemi Michael Asere",
-    message: "I am gettitng the hand og this",
-    participants: ["You", "Opeyemi Michael Asere"],
-    meetingLink: "https://meet.google.com/xyz-uvwx-rst",
-  },
-];
+    if (authError || !user) {
+      console.error("Dashboard: No user found", {
+        error: authError?.message,
+        hasUser: !!user,
+        timestamp: new Date().toISOString(),
+      });
+      redirect("/dietitian-login?redirect=/dashboard");
+    }
 
-export default function DashboardPage() {
-  // Mock summary data - in production, fetch from API
-  const totalSessions = 156;
-  const upcomingSessions = 12;
-  const totalRevenue = 2340000;
+    // 2. Check user role and account status
+    const { data: dbUser, error: userError } = await supabaseAdmin
+      .from("users")
+      .select("role, account_status, name, email, id")
+      .eq("id", user.id)
+      .single();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/47c98e00-030f-46e7-b782-5ff73cdaf6f4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/dashboard/page.tsx:29',message:'Database user fetch result',data:{hasError:!!userError,hasUser:!!dbUser,userId:user?.id,userEmail:user?.email,userRole:dbUser?.role},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
 
-  return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
-      <DashboardSidebar />
-      <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
-        <div className="p-8">
-          {/* Header Section */}
-          <div className="mb-6">
-            <h1 className="text-[15px] font-semibold text-[#f9fafb] mb-1">Dashboard</h1>
-            <p className="text-[13px] text-[#9ca3af] mb-6">
-              Overview of your bookings and revenue.
-            </p>
-          </div>
-            
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            {/* Total Sessions Card */}
-            <div className="border border-[#262626] rounded-lg px-6 py-4 bg-transparent">
-              <div className="text-sm text-[#9ca3af] mb-2">Total Sessions</div>
-              <div className="text-2xl font-semibold text-[#f9fafb]">{totalSessions.toLocaleString()}</div>
-            </div>
+    if (userError || !dbUser) {
+      console.error("Dashboard: User not found in database", {
+        error: userError?.message,
+        userId: user.id,
+        timestamp: new Date().toISOString(),
+      });
+      redirect("/dietitian-enrollment");
+    }
 
-            {/* Upcoming Sessions Card */}
-            <div className="border border-[#262626] rounded-lg px-6 py-4 bg-transparent">
-              <div className="text-sm text-[#9ca3af] mb-2">Upcoming Sessions</div>
-              <div className="text-2xl font-semibold text-[#f9fafb]">{upcomingSessions.toLocaleString()}</div>
-              </div>
+    if (dbUser.role !== "DIETITIAN") {
+      console.error("Dashboard: User is not dietitian", { 
+        role: dbUser.role,
+        userId: user.id,
+        timestamp: new Date().toISOString(),
+      });
+      // Redirect based on role
+      if (dbUser.role === "USER") {
+        redirect("/user-dashboard");
+      } else if (dbUser.role === "ADMIN") {
+        redirect("/admin");
+      } else {
+        redirect("/");
+      }
+    }
 
-            {/* Total Revenue Card */}
-            <div className="border border-[#262626] rounded-lg px-6 py-4 bg-transparent">
-              <div className="text-sm text-[#9ca3af] mb-2">Total Revenue</div>
-              <div className="text-2xl font-semibold text-[#f9fafb]">₦{totalRevenue.toLocaleString()}</div>
-            </div>
-          </div>
+    if (dbUser.account_status !== "ACTIVE") {
+      console.error("Dashboard: Account not active", {
+        status: dbUser.account_status,
+        userId: user.id,
+        timestamp: new Date().toISOString(),
+      });
+      redirect("/account-status");
+    }
 
-          {/* Upcoming Meetings Section */}
-          <div className="mb-6">
-            <h2 className="text-[15px] font-semibold text-[#f9fafb] mb-1">Upcoming Meetings</h2>
-            <p className="text-[13px] text-[#9ca3af] mb-6">
-              See your upcoming meetings and bookings.
-            </p>
-          </div>
+    // Use the authenticated user's ID
+    let dietitianId: string | null = dbUser.id;
 
-          {/* Bookings List */}
-          <BookingsList bookings={mockUpcomingBookings} type="upcoming" />
-        </div>
-      </main>
-    </div>
-  );
+    // 3. Fetch dashboard stats (server-side)
+    const now = new Date().toISOString();
+
+    // Get total sessions (completed bookings)
+    // Use dietitian_id filter if we found the user
+    const totalSessionsQuery = supabaseAdmin
+      .from("bookings")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "COMPLETED");
+    
+    if (dietitianId) {
+      totalSessionsQuery.eq("dietitian_id", dietitianId);
+    }
+    
+    const { count: totalSessions } = await totalSessionsQuery;
+
+    // Get upcoming sessions (future confirmed bookings)
+    // Use dietitian_id filter if we found the user
+    const upcomingSessionsQuery = supabaseAdmin
+      .from("bookings")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "CONFIRMED")
+      .gte("start_time", now);
+    
+    if (dietitianId) {
+      upcomingSessionsQuery.eq("dietitian_id", dietitianId);
+    }
+    
+    const { count: upcomingSessions } = await upcomingSessionsQuery;
+
+    // Get total revenue (sum of successful payments)
+    // Use dietitian_id filter if we found the user
+    let paymentsQuery;
+    if (dietitianId) {
+      // If we have dietitian ID, filter payments by their bookings
+      paymentsQuery = supabaseAdmin
+        .from("payments")
+        .select(
+          `
+          amount,
+          bookings!inner(dietitian_id)
+        `
+        )
+        .eq("status", "SUCCESS")
+        .eq("bookings.dietitian_id", dietitianId);
+    } else {
+      // No dietitian ID, get all payments
+      paymentsQuery = supabaseAdmin
+        .from("payments")
+        .select("amount")
+        .eq("status", "SUCCESS");
+    }
+    
+    const { data: payments, error: paymentsError } = await paymentsQuery;
+
+    let totalRevenue = 0;
+    if (!paymentsError && payments) {
+      totalRevenue = payments.reduce((sum, payment) => {
+        return sum + Number(payment.amount || 0);
+      }, 0);
+    }
+
+    const stats: DashboardStats = {
+      totalSessions: totalSessions || 0,
+      upcomingSessions: upcomingSessions || 0,
+      totalRevenue: totalRevenue,
+    };
+
+    // 4. Fetch upcoming bookings (server-side)
+    const bookingsQuery = supabaseAdmin
+      .from("bookings")
+      .select(
+        `
+        id,
+        start_time,
+        end_time,
+        title,
+        description,
+        meeting_link,
+        event_types:event_type_id (
+          title
+        ),
+        user:users!bookings_user_id_fkey (
+          name,
+          email
+        )
+      `
+      )
+      .eq("status", "CONFIRMED")
+      .gte("start_time", now)
+      .order("start_time", { ascending: true })
+      .limit(5);
+    
+    // Add dietitian_id filter if we found the user
+    if (dietitianId) {
+      bookingsQuery.eq("dietitian_id", dietitianId);
+    }
+    
+    const { data: bookingsData, error: bookingsError } = await bookingsQuery;
+
+    // Transform bookings to match the expected format
+    const upcomingBookings: Booking[] =
+      bookingsData && !bookingsError
+        ? bookingsData
+            .filter((b: any) => {
+              const startTime = new Date(b.start_time);
+              return startTime > new Date(); // Only future bookings
+            })
+            .map((b: any) => ({
+              id: b.id,
+              date: new Date(b.start_time),
+              startTime: new Date(b.start_time),
+              endTime: new Date(b.end_time),
+              title: b.title || b.event_types?.title || "Consultation",
+              description: b.description || "",
+              message: b.description,
+              participants: [
+                "You",
+                b.user?.name || b.user?.email || "Client",
+              ],
+              meetingLink: b.meeting_link || undefined,
+            }))
+        : [];
+
+    // 5. Pass data to client component
+    // Profile is now managed by AuthProvider context via dashboard layout
+    return (
+      <DashboardClient 
+        stats={stats} 
+        upcomingBookings={upcomingBookings}
+        userName={dbUser.name || undefined}
+      />
+    );
+  } catch (error) {
+    console.error("Dashboard: Server error", error);
+    // TEMP: Don't redirect on error when auth is disabled
+    // redirect("/dietitian-login?redirect=/dashboard");
+    
+    // Return empty dashboard on error
+    return (
+      <DashboardClient 
+        stats={{ totalSessions: 0, upcomingSessions: 0, totalRevenue: 0 }} 
+        upcomingBookings={[]} 
+      />
+    );
+  }
 }

@@ -1,51 +1,55 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { UserDashboardSidebar } from "@/components/layout/user-dashboard-sidebar";
+import { UserMobileHeader } from "@/components/layout/mobile-header";
+import { UserBottomNavigation } from "@/components/layout/bottom-navigation";
 import { BookingsList } from "@/components/bookings/BookingsList";
-
-// Mock data - in production, fetch from API (roles reversed - user sees their own bookings)
-const mockUpcomingBookings = [
-  {
-    id: "1",
-    date: new Date("2024-12-17"),
-    startTime: new Date("2024-12-17T02:00:00"),
-    endTime: new Date("2024-12-17T02:45:00"),
-    title: "1-on-1 with a Licensed Dietician",
-    description: "1-on-1 with a Licensed Dietician between You and Dr. Sarah Johnson",
-    message: "I just want to understand my diet",
-    participants: ["You", "Dr. Sarah Johnson"],
-    meetingLink: "https://meet.google.com/abc-defg-hij",
-  },
-  {
-    id: "2",
-    date: new Date("2024-12-22"),
-    startTime: new Date("2024-12-22T12:00:00"),
-    endTime: new Date("2024-12-22T12:30:00"),
-    title: "Chat with a Dietician",
-    description: "Chat with a Dietician between You and Dr. Michael Chen",
-    message: "I am getting the hang of this",
-    participants: ["You", "Dr. Michael Chen"],
-    meetingLink: "https://meet.google.com/xyz-uvwx-rst",
-  },
-  {
-    id: "3",
-    date: new Date("2024-12-25"),
-    startTime: new Date("2024-12-25T10:00:00"),
-    endTime: new Date("2024-12-25T10:30:00"),
-    title: "Nutrition Consultation",
-    description: "Nutrition Consultation between You and Dr. Emily Davis",
-    message: "Follow-up on meal plan progress",
-    participants: ["You", "Dr. Emily Davis"],
-    meetingLink: "https://meet.google.com/mno-pqrs-tuv",
-  },
-];
+import { useBookingsStream } from "@/hooks/useBookingsStream";
+import dayjs from "dayjs";
 
 export default function UpcomingMeetingsPage() {
+  const { bookings, isConnected, error } = useBookingsStream();
+  const [initialBookingsLoaded, setInitialBookingsLoaded] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Preload bookings data immediately
+  useEffect(() => {
+    const fetchInitialBookings = async () => {
+      try {
+        const response = await fetch("/api/bookings", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          setInitialBookingsLoaded(true);
+        }
+      } catch (err) {
+        console.error("Error preloading bookings:", err);
+      }
+    };
+    fetchInitialBookings();
+  }, []);
+
+  // Filter to only upcoming confirmed bookings
+  const now = new Date();
+  const upcomingBookings = bookings.filter(
+    (b) => b.status === "CONFIRMED" && new Date(b.startTime) >= now
+  );
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex">
-      <UserDashboardSidebar />
-      <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
-        <div className="p-8">
+      {/* Mobile Header */}
+      <UserMobileHeader onMenuClick={() => setSidebarOpen(true)} />
+      
+      {/* Sidebar - Hidden on mobile, opens from menu */}
+      <UserDashboardSidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)} 
+      />
+      
+      {/* Main Content */}
+      <main className="flex-1 bg-[#101010] overflow-y-auto lg:ml-64 rounded-tl-lg pb-16 lg:pb-0 w-full">
+        <div className="p-4 lg:p-8 pt-14 lg:pt-8">
           {/* Header Section */}
           <div className="mb-6">
             <h1 className="text-[15px] font-semibold text-[#f9fafb] mb-1">Upcoming Meetings</h1>
@@ -54,10 +58,26 @@ export default function UpcomingMeetingsPage() {
             </p>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+              <p className="text-sm text-yellow-200">{error}</p>
+            </div>
+          )}
+
           {/* Bookings List */}
-          <BookingsList bookings={mockUpcomingBookings} type="upcoming" />
+          {upcomingBookings.length > 0 ? (
+            <BookingsList bookings={upcomingBookings} type="upcoming" />
+          ) : (
+            <div className="text-center py-12 border border-[#262626] rounded-lg">
+              <p className="text-sm text-[#9ca3af]">No upcoming meetings scheduled.</p>
+            </div>
+          )}
         </div>
       </main>
+      
+      {/* Bottom Navigation - Mobile only */}
+      <UserBottomNavigation />
     </div>
   );
 }

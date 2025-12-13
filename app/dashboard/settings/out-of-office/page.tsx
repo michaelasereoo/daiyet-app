@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Filter, Bookmark, ChevronDown, Clock, Pencil, Trash2 } from "lucide-react";
@@ -8,40 +8,171 @@ import { OutOfOfficeModal } from "@/components/settings/OutOfOfficeModal";
 
 interface OOOEntry {
   id: string;
-  startDate: Date;
-  endDate: Date;
+  startDate: string | Date;
+  endDate: string | Date;
   reason: string;
   notes: string;
   forwardToTeam: boolean;
+  forwardUrl?: string | null;
 }
 
 export default function OutOfOfficePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [oooEntries, setOooEntries] = useState<OOOEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
-  const handleCreateOOO = (data: {
+  // Fetch OOO periods from API
+  useEffect(() => {
+    const fetchOOOPeriods = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const response = await fetch("/api/availability/out-of-office", {
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+          throw new Error(errorData.error || `Failed to fetch OOO periods (${response.status})`);
+        }
+
+        const data = await response.json();
+        setOooEntries(data.periods || []);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Failed to load out-of-office periods";
+        setError(errorMessage);
+        console.error("Error fetching OOO periods:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOOOPeriods();
+  }, []);
+
+  const handleCreateOOO = async (data: {
     startDate: Date;
     endDate: Date;
     reason: string;
     notes: string;
     forwardToTeam: boolean;
+    forwardUrl?: string;
   }) => {
-    const newEntry: OOOEntry = {
-      id: String(Date.now()),
-      ...data,
-    };
-    setOooEntries([...oooEntries, newEntry]);
-  };
+    try {
+      if (editingEntry) {
+        // Update existing OOO period
+        const response = await fetch(`/api/availability/out-of-office/${editingEntry}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: typeof data.startDate === "string" ? data.startDate : data.startDate.toISOString().split("T")[0],
+            endDate: typeof data.endDate === "string" ? data.endDate : data.endDate.toISOString().split("T")[0],
+            reason: data.reason,
+            notes: data.notes,
+            forwardToTeam: data.forwardToTeam,
+            forwardUrl: data.forwardUrl,
+          }),
+        });
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this out-of-office entry?")) {
-      setOooEntries(oooEntries.filter((entry) => entry.id !== id));
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+          throw new Error(errorData.error || "Failed to update OOO period");
+        }
+
+        // Refresh OOO periods
+        const refreshResponse = await fetch("/api/availability/out-of-office", {
+          credentials: "include",
+        });
+
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          setOooEntries(refreshData.periods || []);
+        }
+      } else {
+        // Create new OOO period
+        const response = await fetch("/api/availability/out-of-office", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: typeof data.startDate === "string" ? data.startDate : data.startDate.toISOString().split("T")[0],
+            endDate: typeof data.endDate === "string" ? data.endDate : data.endDate.toISOString().split("T")[0],
+            reason: data.reason,
+            notes: data.notes,
+            forwardToTeam: data.forwardToTeam,
+            forwardUrl: data.forwardUrl,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+          throw new Error(errorData.error || "Failed to create OOO period");
+        }
+
+        // Refresh OOO periods
+        const refreshResponse = await fetch("/api/availability/out-of-office", {
+          credentials: "include",
+        });
+
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          setOooEntries(refreshData.periods || []);
+        }
+      }
+
+      setIsModalOpen(false);
+      setEditingEntry(null);
+    } catch (err) {
+      console.error("Error saving OOO period:", err);
+      alert(err instanceof Error ? err.message : "Failed to save out-of-office period");
     }
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this out-of-office entry?")) {
+      return;
+    }
+
+    try {
+      setDeleting(id);
+      const response = await fetch(`/api/availability/out-of-office/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || "Failed to delete OOO period");
+      }
+
+      // Remove from local state
+      setOooEntries(oooEntries.filter((entry) => entry.id !== id));
+    } catch (err) {
+      console.error("Error deleting OOO period:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete out-of-office period");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const formatDate = (date: string | Date) => {
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    return dateObj.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -108,7 +239,24 @@ export default function OutOfOfficePage() {
         </div>
       </div>
 
+      {/* Error State */}
+      {error && !loading && (
+        <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-4">
+          <p className="text-red-300 font-semibold mb-1">Error loading OOO periods</p>
+          <p className="text-sm text-red-200">{error}</p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="text-white">Loading out-of-office periods...</div>
+        </div>
+      )}
+
       {/* OOO Entries List or Empty State */}
+      {!loading && !error && (
+        <>
       {oooEntries.length > 0 ? (
         <div className="space-y-4">
           <h2 className="text-sm font-medium text-[#f9fafb]">
@@ -128,6 +276,14 @@ export default function OutOfOfficePage() {
                     <div className="text-sm font-medium text-[#f9fafb] mb-1">
                       {formatDate(entry.startDate)} - {formatDate(entry.endDate)}
                     </div>
+                        <div className="text-sm text-[#9ca3af] mb-1">
+                          {entry.reason}
+                        </div>
+                        {entry.notes && (
+                          <div className="text-xs text-[#9ca3af] mb-1">
+                            {entry.notes}
+                          </div>
+                        )}
                     <div className="text-sm text-[#9ca3af]">
                       {entry.forwardToTeam ? "Forwarding enabled" : "No forwarding"}
                     </div>
@@ -139,13 +295,15 @@ export default function OutOfOfficePage() {
                       setEditingEntry(entry.id);
                       setIsModalOpen(true);
                     }}
-                    className="text-[#D4D4D4] hover:text-[#f9fafb] transition-colors"
+                        disabled={deleting === entry.id}
+                        className="text-[#D4D4D4] hover:text-[#f9fafb] transition-colors disabled:opacity-50"
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(entry.id)}
-                    className="text-[#D4D4D4] hover:text-red-500 transition-colors"
+                        disabled={deleting === entry.id}
+                        className="text-[#D4D4D4] hover:text-red-500 transition-colors disabled:opacity-50"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -185,7 +343,14 @@ export default function OutOfOfficePage() {
           setEditingEntry(null);
         }}
         onCreate={handleCreateOOO}
+        editingPeriod={
+          editingEntry
+            ? oooEntries.find((e) => e.id === editingEntry) || null
+            : null
+        }
       />
+        </>
+      )}
     </div>
   );
 }

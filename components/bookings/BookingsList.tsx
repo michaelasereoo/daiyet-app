@@ -11,6 +11,7 @@ interface Booking {
   message?: string;
   participants: string[];
   meetingLink?: string;
+  eventTypeSlug?: string | null;
 }
 
 interface BookingsListProps {

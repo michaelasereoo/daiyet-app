@@ -3,7 +3,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createCalendarEventWithMeet } from "@/lib/google-calendar";
+import { createGoogleMeetLinkOnly } from "@/lib/google-calendar";
+import { emailQueue } from "@/lib/email/queue";
+import dayjs from "dayjs";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (booking && !bookingFetchErr) {
-        // Get dietitian and patient info separately
+        // Get dietitian and patient info separately (for email notifications)
         const { data: dietitian } = await supabaseAdmin
           .from("users")
           .select("email, name")
@@ -83,24 +85,18 @@ export async function POST(request: NextRequest) {
 
         let meetLink = "";
 
-        // Try to create Google Calendar event with Meet link
+        // Try to create Google Meet link (minimal calendar event, no attendees)
         try {
-          const result = await createCalendarEventWithMeet(
+          meetLink = await createGoogleMeetLinkOnly(
             booking.dietitian_id,
             {
               summary: booking.title || "Consultation Session",
-              description: booking.description || "",
               startTime: booking.start_time,
               endTime: booking.end_time,
-              attendeeEmails: [
-                dietitian?.email,
-                patient?.email,
-              ].filter(Boolean) as string[],
             }
           );
-          meetLink = result.meetLink;
         } catch (error) {
-          console.error("Failed to create Google Calendar event:", error);
+          console.error("Failed to create Google Meet link:", error);
           // Fallback to placeholder Meet link
           meetLink = generateFallbackMeetLink(reference);
         }
@@ -115,6 +111,37 @@ export async function POST(request: NextRequest) {
 
         if (bookingErr) {
           console.error("Failed to update booking:", bookingErr);
+        }
+
+        // Send booking confirmation emails
+        if (patient?.email) {
+          await emailQueue.enqueue({
+            to: patient.email,
+            subject: "Booking Confirmed - Your Consultation is Scheduled",
+            template: "booking_confirmation",
+            data: {
+              userName: patient.name || "User",
+              eventTitle: booking.title || "Consultation",
+              date: dayjs(booking.start_time).format("MMMM D, YYYY"),
+              time: dayjs(booking.start_time).format("h:mm A"),
+              meetingLink: meetLink,
+            },
+          });
+        }
+
+        if (dietitian?.email) {
+          await emailQueue.enqueue({
+            to: dietitian.email,
+            subject: "New Booking Confirmed",
+            template: "booking_confirmation",
+            data: {
+              userName: dietitian.name || "Dietitian",
+              eventTitle: booking.title || "Consultation",
+              date: dayjs(booking.start_time).format("MMMM D, YYYY"),
+              time: dayjs(booking.start_time).format("h:mm A"),
+              meetingLink: meetLink,
+            },
+          });
         }
       }
     }

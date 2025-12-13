@@ -11,6 +11,12 @@ interface DateOverrideModalProps {
   onClose: () => void;
   onSave: (overrides: Array<{ date: Date; type: "unavailable" | "available"; slots?: Array<{ start: string; end: string }> }>) => void;
   existingDates?: Date[];
+  editingOverride?: {
+    id: string;
+    date: string | Date;
+    type: string;
+    slots?: Array<{ start: string; end: string }>;
+  } | null;
 }
 
 export function DateOverrideModal({
@@ -18,6 +24,7 @@ export function DateOverrideModal({
   onClose,
   onSave,
   existingDates = [],
+  editingOverride = null,
 }: DateOverrideModalProps) {
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [selectedDates, setSelectedDates] = useState<Date[]>(existingDates);
@@ -27,10 +34,29 @@ export function DateOverrideModal({
   ]);
 
   useEffect(() => {
-    if (existingDates.length > 0) {
+    if (editingOverride) {
+      // Load editing override data
+      const date = typeof editingOverride.date === "string" 
+        ? new Date(editingOverride.date) 
+        : editingOverride.date;
+      setSelectedDates([date]);
+      setIsUnavailable(editingOverride.type === "unavailable");
+      if (editingOverride.slots && editingOverride.slots.length > 0) {
+        setTimeSlots(editingOverride.slots);
+      } else {
+        setTimeSlots([{ start: "9:00am", end: "5:00pm" }]);
+      }
+    } else if (existingDates.length > 0) {
       setSelectedDates(existingDates);
+      setIsUnavailable(false);
+      setTimeSlots([{ start: "9:00am", end: "5:00pm" }]);
+    } else {
+      // Reset form
+      setSelectedDates([]);
+      setIsUnavailable(false);
+      setTimeSlots([{ start: "9:00am", end: "5:00pm" }]);
     }
-  }, [existingDates]);
+  }, [existingDates, editingOverride, isOpen]);
 
   if (!isOpen) return null;
 

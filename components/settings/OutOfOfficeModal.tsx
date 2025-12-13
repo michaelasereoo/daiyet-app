@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,18 +16,56 @@ interface OutOfOfficeModalProps {
     reason: string;
     notes: string;
     forwardToTeam: boolean;
+    forwardUrl?: string;
   }) => void;
+  editingPeriod?: {
+    id: string;
+    startDate: string | Date;
+    endDate: string | Date;
+    reason: string;
+    notes: string;
+    forwardToTeam: boolean;
+    forwardUrl?: string | null;
+  } | null;
 }
 
-export function OutOfOfficeModal({ isOpen, onClose, onCreate }: OutOfOfficeModalProps) {
+export function OutOfOfficeModal({ isOpen, onClose, onCreate, editingPeriod = null }: OutOfOfficeModalProps) {
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [reason, setReason] = useState("Unspecified");
   const [notes, setNotes] = useState("");
   const [forwardToTeam, setForwardToTeam] = useState(false);
+  const [forwardUrl, setForwardUrl] = useState("");
   const [showCalendar, setShowCalendar] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [selectingStart, setSelectingStart] = useState(true);
+
+  // Load editing period data when modal opens
+  useEffect(() => {
+    if (editingPeriod && isOpen) {
+      const start = typeof editingPeriod.startDate === "string" 
+        ? new Date(editingPeriod.startDate) 
+        : editingPeriod.startDate;
+      const end = typeof editingPeriod.endDate === "string" 
+        ? new Date(editingPeriod.endDate) 
+        : editingPeriod.endDate;
+      setStartDate(start);
+      setEndDate(end);
+      setReason(editingPeriod.reason || "Unspecified");
+      setNotes(editingPeriod.notes || "");
+      setForwardToTeam(editingPeriod.forwardToTeam || false);
+      setForwardUrl(editingPeriod.forwardUrl || "");
+    } else if (isOpen && !editingPeriod) {
+      // Reset form for new entry
+      setStartDate(null);
+      setEndDate(null);
+      setReason("Unspecified");
+      setNotes("");
+      setForwardToTeam(false);
+      setForwardUrl("");
+      setSelectingStart(true);
+    }
+  }, [editingPeriod, isOpen]);
 
   if (!isOpen) return null;
 
@@ -91,6 +129,7 @@ export function OutOfOfficeModal({ isOpen, onClose, onCreate }: OutOfOfficeModal
         reason,
         notes,
         forwardToTeam,
+        forwardUrl: forwardToTeam ? forwardUrl : undefined,
       });
       // Reset form
       setStartDate(null);
@@ -98,6 +137,7 @@ export function OutOfOfficeModal({ isOpen, onClose, onCreate }: OutOfOfficeModal
       setReason("Unspecified");
       setNotes("");
       setForwardToTeam(false);
+      setForwardUrl("");
       setSelectingStart(true);
       onClose();
     }
@@ -255,6 +295,7 @@ export function OutOfOfficeModal({ isOpen, onClose, onCreate }: OutOfOfficeModal
           </div>
 
           {/* Forward to Team Toggle */}
+          <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm text-[#D4D4D4]">
               Provide a link to a team member when OOO
@@ -268,6 +309,16 @@ export function OutOfOfficeModal({ isOpen, onClose, onCreate }: OutOfOfficeModal
               />
               <div className="w-11 h-6 bg-[#374151] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#9ca3af]"></div>
             </label>
+            </div>
+            {forwardToTeam && (
+              <Input
+                type="url"
+                value={forwardUrl}
+                onChange={(e) => setForwardUrl(e.target.value)}
+                placeholder="https://example.com/team-member"
+                className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb] placeholder:text-[#9ca3af] focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:border-[#404040]"
+              />
+            )}
           </div>
         </div>
 

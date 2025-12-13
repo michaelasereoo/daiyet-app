@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
 import { Button } from "@/components/ui/button";
@@ -10,27 +10,12 @@ import {
   Trash2, 
   Plus, 
   Copy, 
-  Info,
   ChevronDown,
-  ArrowLeft
+  ArrowLeft,
+  Check
 } from "lucide-react";
-
-// Mock data - in production, fetch from API based on id
-const mockSchedule = {
-  id: "1",
-  name: "Extra working",
-  isDefault: false,
-  timezone: "Africa/Lagos",
-  days: {
-    Sunday: { enabled: false, slots: [] },
-    Monday: { enabled: true, slots: [{ start: "9:00am", end: "5:00pm" }] },
-    Tuesday: { enabled: true, slots: [{ start: "9:00am", end: "5:00pm" }] },
-    Wednesday: { enabled: true, slots: [{ start: "9:00am", end: "5:00pm" }] },
-    Thursday: { enabled: true, slots: [{ start: "9:00am", end: "5:00pm" }] },
-    Friday: { enabled: true, slots: [{ start: "9:00am", end: "5:00pm" }] },
-    Saturday: { enabled: false, slots: [] },
-  },
-};
+import { TimeSelect } from "@/components/availability/TimeSelect";
+import { CopyTimesModal } from "@/components/availability/CopyTimesModal";
 
 const daysOfWeek = [
   "Sunday",
@@ -42,14 +27,93 @@ const daysOfWeek = [
   "Saturday",
 ];
 
-export default function AvailabilityDetailPage({ params }: { params: { id: string } }) {
+interface Schedule {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  timezone: string;
+  days: Record<string, { enabled: boolean; slots: Array<{ start: string; end: string }> }>;
+}
+
+export default function AvailabilityDetailPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
   const router = useRouter();
-  const [schedule, setSchedule] = useState(mockSchedule);
+  const [schedule, setSchedule] = useState<Schedule | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [scheduleName, setScheduleName] = useState(schedule.name);
+  const [scheduleName, setScheduleName] = useState("");
+  const [copyModalOpen, setCopyModalOpen] = useState(false);
+  const [copySourceDay, setCopySourceDay] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Preload from cache, then fetch fresh data
+  useEffect(() => {
+    const resolvedParams = params instanceof Promise ? params : Promise.resolve(params);
+    
+    resolvedParams.then(async (resolved) => {
+      const scheduleId = resolved.id;
+      
+      // Try to load from cache first
+      if (typeof window !== "undefined") {
+        const cached = localStorage.getItem(`availability_schedule_${scheduleId}`);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            // Use cached data if less than 5 minutes old
+            if (Date.now() - parsed.timestamp < 300000) {
+              setSchedule(parsed.data);
+              setScheduleName(parsed.data.name);
+              setLoading(false);
+            }
+          } catch (err) {
+            console.error("Error parsing cached schedule:", err);
+          }
+        }
+      }
+
+      // Fetch fresh data
+      try {
+        setError(null);
+
+        const response = await fetch(`/api/availability/${scheduleId}`, {
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+          throw new Error(errorData.error || `Failed to fetch schedule (${response.status})`);
+        }
+
+        const data = await response.json();
+        setSchedule(data.schedule);
+        setScheduleName(data.schedule.name);
+        
+        // Cache the schedule
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`availability_schedule_${scheduleId}`, JSON.stringify({
+            data: data.schedule,
+            timestamp: Date.now()
+          }));
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Failed to load schedule";
+        setError(errorMessage);
+        console.error("Error fetching schedule:", err);
+      } finally {
+        setLoading(false);
+      }
+    });
+  }, [params]);
 
   const toggleDay = (day: string) => {
+    if (!schedule) return;
+    
     setSchedule((prev) => {
+      if (!prev) return prev;
       const dayData = prev.days[day as keyof typeof prev.days];
       const isCurrentlyEnabled = dayData.enabled;
       
@@ -72,8 +136,10 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
   };
 
   const addTimeSlot = (day: string) => {
+    if (!schedule) return;
     setSchedule((prev) => {
-      const currentSlots = prev.days[day as keyof typeof prev.days].slots;
+      if (!prev) return prev;
+      const currentSlots = prev.days[day as keyof typeof prev.days]?.slots || [];
       const lastSlot = currentSlots[currentSlots.length - 1];
       // If there's a last slot, start the new one where it ended, otherwise default
       const newStart = lastSlot ? lastSlot.end : "9:00am";
@@ -96,23 +162,43 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
     });
   };
 
-  const copyTimeSlot = (day: string, slotIndex: number) => {
-    const slot = schedule.days[day as keyof typeof schedule.days].slots[slotIndex];
-    setSchedule((prev) => ({
+  const handleCopyTimes = (day: string) => {
+    setCopySourceDay(day);
+    setCopyModalOpen(true);
+  };
+
+  const handleApplyCopy = (selectedDays: string[]) => {
+    if (!schedule || !copySourceDay) return;
+
+    const sourceDayData = schedule.days[copySourceDay as keyof typeof schedule.days];
+    const sourceSlots = sourceDayData?.slots || [];
+
+    setSchedule((prev) => {
+      if (!prev) return prev;
+      const updatedDays = { ...prev.days };
+
+      selectedDays.forEach((targetDay) => {
+        updatedDays[targetDay as keyof typeof updatedDays] = {
+          enabled: true,
+          slots: sourceSlots.map((slot) => ({ ...slot })),
+        };
+      });
+
+      return {
       ...prev,
-      days: {
-        ...prev.days,
-        [day]: {
-          ...prev.days[day as keyof typeof prev.days],
-          slots: [...prev.days[day as keyof typeof prev.days].slots, { ...slot }],
-        },
-      },
-    }));
+        days: updatedDays,
+      };
+    });
+
+    setCopyModalOpen(false);
+    setCopySourceDay(null);
   };
 
   const deleteTimeSlot = (day: string, slotIndex: number) => {
+    if (!schedule) return;
     setSchedule((prev) => {
-      const newSlots = [...prev.days[day as keyof typeof prev.days].slots];
+      if (!prev) return prev;
+      const newSlots = [...(prev.days[day as keyof typeof prev.days]?.slots || [])];
       newSlots.splice(slotIndex, 1);
       return {
         ...prev,
@@ -128,8 +214,10 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
   };
 
   const updateTimeSlot = (day: string, slotIndex: number, field: "start" | "end", value: string) => {
+    if (!schedule) return;
     setSchedule((prev) => {
-      const newSlots = [...prev.days[day as keyof typeof prev.days].slots];
+      if (!prev) return prev;
+      const newSlots = [...(prev.days[day as keyof typeof prev.days]?.slots || [])];
       newSlots[slotIndex] = { ...newSlots[slotIndex], [field]: value };
       return {
         ...prev,
@@ -145,8 +233,9 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
   };
 
   const getSummary = () => {
+    if (!schedule) return "Loading...";
     const enabledDays = daysOfWeek.filter(
-      (day) => schedule.days[day as keyof typeof schedule.days].enabled
+      (day) => schedule.days[day as keyof typeof schedule.days]?.enabled
     );
     if (enabledDays.length === 0) return "No days selected";
     if (enabledDays.length === 5 && enabledDays.includes("Monday") && enabledDays.includes("Friday") && !enabledDays.includes("Sunday") && !enabledDays.includes("Saturday")) {
@@ -155,24 +244,139 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
     return `${enabledDays.map((d) => d.slice(0, 3)).join(", ")}, 9:00 AM - 5:00 PM`;
   };
 
-  const handleSave = () => {
-    // In production, save to API
-    console.log("Saving schedule:", schedule);
-    router.push("/dashboard/availability");
-  };
+  const handleSave = async () => {
+    if (!schedule) return;
 
-  const handleDelete = () => {
-    // In production, delete via API
-    if (confirm("Are you sure you want to delete this schedule?")) {
-      router.push("/dashboard/availability");
+    try {
+      setSaving(true);
+      setError(null);
+
+      const resolvedParams = params instanceof Promise ? await params : params;
+      const scheduleId = resolvedParams.id;
+
+      const response = await fetch(`/api/availability/${scheduleId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: scheduleName || schedule.name,
+          timezone: schedule.timezone,
+          days: schedule.days,
+          isDefault: schedule.isDefault,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || "Failed to save schedule");
+      }
+
+      // Show success modal
+      setShowSuccessModal(true);
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        router.push("/dashboard/availability");
+      }, 2000);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to save schedule";
+      setError(errorMessage);
+      console.error("Error saving schedule:", err);
+    } finally {
+      setSaving(false);
     }
   };
+
+  const handleDelete = async () => {
+    if (!schedule) return;
+
+    if (!confirm("Are you sure you want to delete this schedule?")) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      const resolvedParams = params instanceof Promise ? await params : params;
+      const scheduleId = resolvedParams.id;
+
+      const response = await fetch(`/api/availability/${scheduleId}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || "Failed to delete schedule");
+      }
+
+      // Navigate back to availability page
+      router.push("/dashboard/availability");
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete schedule";
+      setError(errorMessage);
+      console.error("Error deleting schedule:", err);
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex">
+        <DashboardSidebar />
+        <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
+          <div className="p-8">
+            <div className="text-white">Loading schedule...</div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error && !schedule) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex">
+        <DashboardSidebar />
+        <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
+          <div className="p-8">
+            <button
+              onClick={() => router.push("/dashboard/availability")}
+              className="mb-4 text-[#D4D4D4] hover:text-[#f9fafb] transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div className="bg-red-900/20 border border-red-800 rounded-lg p-4">
+              <p className="text-red-300 font-semibold mb-1">Error loading schedule</p>
+              <p className="text-sm text-red-200">{error}</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!schedule) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex">
       <DashboardSidebar />
       <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
         <div className="p-8">
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-4">
+              <p className="text-red-300 font-semibold mb-1">Error</p>
+              <p className="text-sm text-red-200">{error}</p>
+            </div>
+          )}
+
           {/* Header */}
           <div className="mb-6">
             <button
@@ -189,12 +393,12 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
                     onChange={(e) => setScheduleName(e.target.value)}
                     onBlur={() => {
                       setIsEditingName(false);
-                      setSchedule((prev) => ({ ...prev, name: scheduleName }));
+                      setSchedule((prev) => prev ? { ...prev, name: scheduleName } : prev);
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         setIsEditingName(false);
-                        setSchedule((prev) => ({ ...prev, name: scheduleName }));
+                        setSchedule((prev) => prev ? { ...prev, name: scheduleName } : prev);
                       }
                     }}
                     className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb] text-lg font-semibold px-2 py-1"
@@ -222,7 +426,7 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
                       type="checkbox"
                       checked={schedule.isDefault}
                       onChange={(e) =>
-                        setSchedule((prev) => ({ ...prev, isDefault: e.target.checked }))
+                        setSchedule((prev) => prev ? { ...prev, isDefault: e.target.checked } : prev)
                       }
                       className="sr-only peer"
                     />
@@ -231,15 +435,17 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
                 </div>
                 <button
                   onClick={handleDelete}
-                  className="text-[#D4D4D4] hover:text-red-500 transition-colors"
+                  disabled={saving}
+                  className="text-[#D4D4D4] hover:text-red-500 transition-colors disabled:opacity-50"
                 >
                   <Trash2 className="h-5 w-5" />
                 </button>
                 <Button
                   onClick={handleSave}
-                  className="bg-white hover:bg-gray-100 text-black px-4 py-2"
+                  disabled={saving}
+                  className="bg-white hover:bg-gray-100 text-black px-4 py-2 disabled:opacity-50"
                 >
-                  Save
+                  {saving ? "Saving..." : "Save"}
                 </Button>
               </div>
             </div>
@@ -274,22 +480,18 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
                         <>
                           {/* First time slot on the same line */}
                           <div className="flex items-center gap-2">
-                            <Input
-                              type="text"
+                            <TimeSelect
                               value={dayData.slots[0].start}
-                              onChange={(e) =>
-                                updateTimeSlot(day, 0, "start", e.target.value)
+                              onChange={(value) =>
+                                updateTimeSlot(day, 0, "start", value)
                               }
-                              className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb] text-sm w-24"
                             />
                             <span className="text-[#9ca3af]">-</span>
-                            <Input
-                              type="text"
+                            <TimeSelect
                               value={dayData.slots[0].end}
-                              onChange={(e) =>
-                                updateTimeSlot(day, 0, "end", e.target.value)
+                              onChange={(value) =>
+                                updateTimeSlot(day, 0, "end", value)
                               }
-                              className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb] text-sm w-24"
                             />
                             <button
                               onClick={() => addTimeSlot(day)}
@@ -298,8 +500,9 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
                               <Plus className="h-4 w-4" />
                             </button>
                             <button
-                              onClick={() => copyTimeSlot(day, 0)}
-                              className="text-[#D4D4D4] hover:text-[#f9fafb] transition-colors"
+                              onClick={() => handleCopyTimes(day)}
+                              className="text-[#D4D4D4] hover:text-[#f9fafb] transition-colors relative"
+                              title="Copy times to"
                             >
                               <Copy className="h-4 w-4" />
                             </button>
@@ -313,22 +516,18 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
                       <div className="mt-2 space-y-2">
                         {dayData.slots.slice(1).map((slot, slotIndex) => (
                           <div key={slotIndex + 1} className="flex items-center gap-2 ml-[148px]">
-                            <Input
-                              type="text"
+                            <TimeSelect
                               value={slot.start}
-                              onChange={(e) =>
-                                updateTimeSlot(day, slotIndex + 1, "start", e.target.value)
+                              onChange={(value) =>
+                                updateTimeSlot(day, slotIndex + 1, "start", value)
                               }
-                              className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb] text-sm w-24"
                             />
                             <span className="text-[#9ca3af]">-</span>
-                            <Input
-                              type="text"
+                            <TimeSelect
                               value={slot.end}
-                              onChange={(e) =>
-                                updateTimeSlot(day, slotIndex + 1, "end", e.target.value)
+                              onChange={(value) =>
+                                updateTimeSlot(day, slotIndex + 1, "end", value)
                               }
-                              className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb] text-sm w-24"
                             />
                             <button
                               onClick={() => deleteTimeSlot(day, slotIndex + 1)}
@@ -354,55 +553,63 @@ export default function AvailabilityDetailPage({ params }: { params: { id: strin
                 </label>
                 <div className="relative">
                   <select
-                    value={schedule.timezone}
-                    onChange={(e) =>
-                      setSchedule((prev) => ({ ...prev, timezone: e.target.value }))
-                    }
-                    className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
+                    value="Africa/Lagos"
+                    disabled
+                    className="w-full bg-[#0a0a0a] border border-[#262626] text-[#9ca3af] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040] opacity-60 cursor-not-allowed"
                   >
                     <option value="Africa/Lagos">Africa/Lagos</option>
-                    <option value="America/New_York">America/New_York</option>
-                    <option value="Europe/London">Europe/London</option>
-                    <option value="Asia/Tokyo">Asia/Tokyo</option>
                   </select>
-                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#9ca3af] pointer-events-none" />
+                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#9ca3af] pointer-events-none opacity-60" />
                 </div>
               </div>
-
-              {/* Troubleshooter */}
-              <div className="border border-[#262626] rounded-lg p-4 bg-[#171717]">
-                <h3 className="text-sm font-medium text-[#f9fafb] mb-2">
-                  Something doesn't look right?
-                </h3>
-                <Button
-                  variant="outline"
-                  className="w-full bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#262626]"
-                >
-                  Launch troubleshooter
-                </Button>
-              </div>
             </div>
           </div>
 
-          {/* Date Overrides Section */}
-          <div className="mt-8 pt-6 border-t border-[#262626]">
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-sm font-semibold text-[#f9fafb]">Date overrides</h2>
-              <Info className="h-4 w-4 text-[#9ca3af]" />
-            </div>
-            <p className="text-sm text-[#9ca3af] mb-4">
-              Add dates when your availability changes from your daily hours.
-            </p>
-            <Button
-              variant="outline"
-              className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717]"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add an override
-            </Button>
-          </div>
         </div>
       </main>
+
+      {/* Copy Times Modal */}
+      {copyModalOpen && copySourceDay && schedule && (
+        <CopyTimesModal
+          isOpen={copyModalOpen}
+          onClose={() => {
+            setCopyModalOpen(false);
+            setCopySourceDay(null);
+          }}
+          sourceDay={copySourceDay}
+          sourceSlots={schedule.days[copySourceDay as keyof typeof schedule.days]?.slots || []}
+          allDays={daysOfWeek}
+          onApply={handleApplyCopy}
+        />
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#171717] border border-[#262626] rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                <Check className="h-5 w-5 text-green-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-[#f9fafb]">Availability saved successfully!</h3>
+            </div>
+            <p className="text-sm text-[#9ca3af] mb-4">
+              Your changes have been saved and will be reflected immediately.
+            </p>
+            <div className="flex justify-end">
+              <Button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  router.push("/dashboard/availability");
+                }}
+                className="bg-white hover:bg-gray-100 text-black px-4 py-2"
+              >
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

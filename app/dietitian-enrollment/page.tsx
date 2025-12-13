@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { CheckCircle2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { CheckCircle2, X } from "lucide-react";
+import { createBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,11 +22,23 @@ const specializations = [
 ];
 
 export default function DietitianEnrollmentPage() {
+  // Create Supabase client instance (only in browser)
+  const supabase = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return createBrowserClient();
+  }, []);
+  
   const [step, setStep] = useState<Step>(1);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<React.ReactNode | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [checkingEnrollment, setCheckingEnrollment] = useState(true);
+  const [emailExistsModalOpen, setEmailExistsModalOpen] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -48,53 +60,270 @@ export default function DietitianEnrollmentPage() {
   const privacyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (!supabase) return; // Wait for client to be ready
+    
     const init = async () => {
-      // Check if returning from OAuth callback
-      const urlParams = new URLSearchParams(window.location.search);
-      const connected = urlParams.get("connected");
+      // Safety timeout - always clear loading state after 8 seconds max
+      const safetyTimeout = setTimeout(() => {
+        console.warn("Enrollment check taking too long, clearing loading state");
+        setCheckingEnrollment(false);
+      }, 8000);
       
-      if (connected) {
-        // Clean up URL
-        window.history.replaceState({}, "", window.location.pathname);
-      }
+      try {
+        setCheckingEnrollment(true);
+        console.log("Starting enrollment check...");
+        
+        // Check if returning from OAuth callback
+        if (typeof window === 'undefined') {
+          clearTimeout(safetyTimeout);
+          setCheckingEnrollment(false);
+          return;
+        }
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const connected = urlParams.get("connected");
+        
+        if (connected) {
+          console.log("Returning from OAuth, cleaning up URL...");
+          // Clean up URL
+          window.history.replaceState({}, "", window.location.pathname);
+          // Small delay to ensure session cookies are set after OAuth redirect
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user) {
-        setGoogleConnected(true);
-        const name =
-          (session.user.user_metadata as any)?.full_name ||
-          session.user.user_metadata?.name ||
-          "";
-        const mail = session.user.email || "";
-        setFullName((prev) => prev || name);
-        setEmail((prev) => prev || mail);
+        console.log("Getting session...");
+        // Try to get session with retry logic
+        let session = null;
+        let sessionError = null;
+        
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const result = await Promise.race([
+              supabase.auth.getSession(),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Session timeout")), 3000)
+              )
+            ]) as any;
+            
+            session = result.data?.session;
+            sessionError = result.error;
+            
+            if (session || !connected) {
+              console.log("Session retrieved:", session ? "yes" : "no");
+              break; // Got session or not returning from OAuth
+            }
+            
+            // Wait a bit before retrying (only if returning from OAuth)
+            if (connected && attempt < 2) {
+              console.log(`Session not available, retrying... (attempt ${attempt + 1})`);
+              await new Promise(resolve => setTimeout(resolve, 300));
+            }
+          } catch (timeoutErr) {
+            console.error("Session retrieval timeout:", timeoutErr);
+            if (attempt === 2) {
+              sessionError = timeoutErr as any;
+            }
+          }
+        }
+        
+        if (sessionError) {
+          console.error("Session error:", sessionError);
+          setError("Failed to get session. Please try signing in again.");
+          clearTimeout(safetyTimeout);
+          setCheckingEnrollment(false);
+          return;
+        }
+        
+        if (session?.user) {
+          console.log("User session found, checking enrollment status...");
+          
+          // Check if user already has DIETITIAN role
+          try {
+            const roleCheckResponse = await fetch("/api/check-enrollment");
+            if (roleCheckResponse.ok) {
+              const enrollmentData = await roleCheckResponse.json();
+              if (enrollmentData.enrolled && enrollmentData.role === "DIETITIAN") {
+                // User is already a dietitian - redirect to dashboard
+                console.log("User is already enrolled as DIETITIAN, redirecting to dashboard");
+                window.location.href = "/dashboard";
+                return;
+              }
+            }
+          } catch (roleCheckError) {
+            console.warn("Error checking enrollment status:", roleCheckError);
+            // Continue with enrollment form if role check fails
+          }
+          
+          // User doesn't have DIETITIAN role - proceed with enrollment form
+          setGoogleConnected(true);
+          const name =
+            (session.user.user_metadata as any)?.full_name ||
+            session.user.user_metadata?.name ||
+            "";
+          const mail = session.user.email || "";
+          setFullName((prev) => prev || name);
+          setEmail((prev) => prev || mail);
+          console.log("Enrollment check complete, showing form");
+        } else {
+          // No session - clear loading state
+          console.log("No session found");
+          setError("No active session. Please connect with Google first.");
+          clearTimeout(safetyTimeout);
+          setCheckingEnrollment(false);
+          return;
+        }
+      } catch (err: any) {
+        // Catch any unexpected errors
+        console.error("Unexpected error in enrollment init:", err);
+        setError("An error occurred. Please refresh the page and try again.");
+      } finally {
+        clearTimeout(safetyTimeout);
+        setCheckingEnrollment(false);
       }
     };
     void init();
-  }, []);
+  }, [supabase]);
+
+  // Don't render until client is ready
+  if (!supabase) {
+    return (
+      <div className="min-h-screen bg-[#0b0b0b] flex items-center justify-center">
+        <div className="text-white">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const checkEmailExists = async (emailToCheck: string): Promise<boolean> => {
+    if (!emailToCheck || !emailToCheck.trim()) return false;
+    
+    setCheckingEmail(true);
+    try {
+      const response = await fetch("/api/dietitians/check-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: emailToCheck.trim() }),
+      });
+
+      const data = await response.json();
+      
+      if (data.exists) {
+        setEmailExistsModalOpen(true);
+        setCheckingEmail(false);
+        return true;
+      }
+      
+      setCheckingEmail(false);
+      return false;
+    } catch (err) {
+      console.error("Error checking email:", err);
+      setCheckingEmail(false);
+      return false; // Allow OAuth to proceed if check fails
+    }
+  };
 
   const handleGoogle = async () => {
+    if (!supabase) return;
+    
     setConnecting(true);
     setError(null);
+    
+    // Check if email exists before initiating OAuth
+    if (email && email.trim()) {
+      const emailExists = await checkEmailExists(email);
+      if (emailExists) {
+        setConnecting(false);
+        return; // Don't proceed with OAuth if email exists
+      }
+    }
     
     try {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/dietitian-enrollment?connected=true`,
+          redirectTo: `${window.location.origin}/auth/callback?source=dietitian-enrollment`,
         },
       });
 
       if (error) {
+        // Check if user already exists
+        const errorMessage = error.message?.toLowerCase() || "";
+        if (
+          errorMessage.includes("already registered") ||
+          errorMessage.includes("user already exists") ||
+          errorMessage.includes("email already") ||
+          error.code === "user_already_registered"
+        ) {
+          setError(
+            <>
+              This Google account is already registered. Please{" "}
+              <a
+                href="/dietitian-login"
+                className="underline text-white hover:text-white/80 font-medium"
+              >
+                go to login
+              </a>{" "}
+              to sign in.
+            </>
+          );
+        } else {
         setError(error.message);
+        }
         setConnecting(false);
       }
       // OAuth will redirect, so we don't need to handle success here
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect with Google");
+      const errorMessage = err instanceof Error ? err.message : "Failed to connect with Google";
+      const lowerMessage = errorMessage.toLowerCase();
+      
+      if (
+        lowerMessage.includes("already registered") ||
+        lowerMessage.includes("user already exists") ||
+        lowerMessage.includes("email already")
+      ) {
+        setError(
+          <>
+            This Google account is already registered. Please{" "}
+            <a
+              href="/dietitian-login"
+              className="underline text-white hover:text-white/80 font-medium"
+            >
+              go to login
+            </a>{" "}
+            to sign in.
+          </>
+        );
+      } else {
+        setError(errorMessage);
+      }
       setConnecting(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (!supabase) return;
+    
+    setError(null);
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        setError(error.message);
+        return;
+      }
+
+      // Reset Google connection state and clear form fields
+      setGoogleConnected(false);
+      setFullName("");
+      setEmail("");
+      // Keep other fields as user might want to keep them
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to disconnect Google");
     }
   };
 
@@ -121,14 +350,111 @@ export default function DietitianEnrollmentPage() {
   const stepThreeValid =
     googleConnected && stepOneValid && stepTwoValid && termsRead && privacyRead && confirmChecked;
 
-  const handleSubmit = () => {
-    if (!stepThreeValid) return;
-    setSubmitted(true);
-    setTimeout(() => {
-      if (typeof window !== "undefined") {
-        window.location.href = "/dietitian-login";
+  const handleSubmit = async () => {
+    if (!stepThreeValid) {
+      // Provide specific feedback on what's missing
+      const missing = [];
+      if (!googleConnected) missing.push("Google connection");
+      if (!stepOneValid) missing.push("Step 1 fields");
+      if (!stepTwoValid) missing.push("Step 2 fields");
+      if (!termsRead) missing.push("Terms of Service (scroll to bottom)");
+      if (!privacyRead) missing.push("Privacy Policy (scroll to bottom)");
+      if (!confirmChecked) missing.push("Confirmation checkbox");
+      setError(`Cannot submit: ${missing.join(", ")}`);
+      return;
+    }
+    
+    setError(null);
+    setSubmitted(false);
+    setSubmitting(true);
+
+    if (!supabase) return;
+    
+    try {
+      // Verify session before proceeding
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        setError("Session expired. Please connect with Google again.");
+        setGoogleConnected(false);
+        setSubmitting(false);
+        return;
       }
-    }, 1200);
+
+      // Convert profile picture to base64 if available
+      let profilePictureBase64 = null;
+      if (profilePicture) {
+        const reader = new FileReader();
+        profilePictureBase64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(profilePicture);
+        });
+      }
+
+      // Submit enrollment data
+      const response = await fetch("/api/dietitians/enroll", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          fullName,
+          email,
+          phone,
+          dob,
+          location,
+          profilePicture: profilePictureBase64,
+          licenseNumber,
+          experience,
+          specialization,
+          bio,
+        }),
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        // If response is not JSON, get text
+        const text = await response.text();
+        console.error("Failed to parse response:", text);
+        setError(`Server error: ${text || response.statusText}`);
+        setSubmitting(false);
+        return;
+      }
+
+      if (!response.ok) {
+        console.error("Enrollment error:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: data?.error,
+          details: data?.details,
+        });
+        const errorMessage = data?.details 
+          ? `${data.error || "Error"}: ${data.details}` 
+          : data?.error || `Failed to submit enrollment (${response.status})`;
+        setError(errorMessage);
+        setSubmitting(false);
+        return;
+      }
+
+    setSubmitting(false);
+    setSubmitted(true);
+    
+    // Redirect to dashboard after successful enrollment (user is already authenticated)
+    setTimeout(() => {
+      window.location.href = "/dashboard";
+    }, 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit enrollment");
+      setSubmitted(false);
+      setSubmitting(false);
+    }
   };
 
   const handleNext = () => {
@@ -230,22 +556,24 @@ export default function DietitianEnrollmentPage() {
 
         {/* Right column: Form */}
         <div className="lg:col-span-2 bg-white/5 border border-white/10 rounded-2xl md:rounded-3xl p-5 md:p-7 lg:p-8 backdrop-blur-sm shadow-2xl shadow-black/40">
-          {submitted ? (
+          {checkingEnrollment ? (
+            <div className="flex flex-col items-center text-center space-y-4 py-10 md:py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+              <h2 className="text-2xl font-semibold">Checking enrollment status...</h2>
+              <p className="text-white/70 max-w-xl text-sm md:text-base">
+                Please wait while we verify your account.
+              </p>
+            </div>
+          ) : submitted ? (
             <div className="flex flex-col items-center text-center space-y-4 py-10 md:py-12">
               <CheckCircle2 className="h-12 w-12 text-emerald-300" />
-              <h2 className="text-2xl font-semibold">Application submitted</h2>
+              <h2 className="text-2xl font-semibold">Enrollment successful!</h2>
               <p className="text-white/70 max-w-xl text-sm md:text-base">
-                Thanks for applying. You’ll be redirected to the dietitian login page to sign in with
-                Google and continue to your dietitian dashboard.
+                You'll be redirected to your dashboard shortly.
               </p>
-              <Button
-                className="bg-white text-black hover:bg-white/90 h-12 px-5"
-                onClick={() => {
-                  if (typeof window !== "undefined") window.location.href = "/dietitian-login";
-                }}
-              >
-                Go to dietitian login
-              </Button>
+              <p className="text-white/50 max-w-xl text-xs md:text-sm">
+                If you don't see the email, please check your spam folder.
+              </p>
             </div>
           ) : (
             <>
@@ -259,17 +587,36 @@ export default function DietitianEnrollmentPage() {
                         Connect Google, then complete your profile basics.
                       </p>
                     </div>
+                    <div className="flex gap-3">
+                      {googleConnected ? (
+                        <>
+                          <Button
+                            onClick={handleDisconnectGoogle}
+                            variant="outline"
+                            className="h-12 w-full sm:w-auto px-5 border-white/20 text-white hover:bg-white/10 inline-flex items-center justify-center gap-2"
+                          >
+                            <GoogleIcon />
+                            Disconnect Google
+                          </Button>
+                          <Button
+                            disabled
+                            className="h-12 w-full sm:w-auto px-5 bg-emerald-500 text-black cursor-not-allowed inline-flex items-center justify-center gap-2"
+                          >
+                            <GoogleIcon />
+                            Google connected
+                          </Button>
+                        </>
+                      ) : (
                     <Button
                       onClick={handleGoogle}
-                      disabled={connecting || googleConnected}
-                      className={`h-12 w-full sm:w-auto px-5 ${
-                        googleConnected
-                          ? "bg-emerald-500 text-black hover:bg-emerald-400"
-                          : "bg-white text-black hover:bg-white/90"
-                      }`}
-                    >
-                      {googleConnected ? "Google connected" : connecting ? "Connecting..." : "Continue with Google"}
+                          disabled={connecting}
+                          className="h-12 w-full sm:w-auto px-5 bg-white text-black hover:bg-white/90 inline-flex items-center justify-center gap-2"
+                        >
+                          <GoogleIcon />
+                          {connecting ? "Connecting..." : "Continue with Google"}
                     </Button>
+                      )}
+                    </div>
                   </div>
                   {error && <div className="text-sm text-red-300">{error}</div>}
 
@@ -456,11 +803,37 @@ export default function DietitianEnrollmentPage() {
                         ← Back
                       </Button>
                       <Button
-                        disabled={!stepThreeValid}
+                        disabled={!stepThreeValid || submitting}
                         className="bg-white text-black hover:bg-white/90 h-11"
                         onClick={handleSubmit}
                       >
-                        Submit application
+                        {submitting ? (
+                          <span className="inline-flex items-center gap-2">
+                            <svg
+                              className="animate-spin h-4 w-4"
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              />
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              />
+                            </svg>
+                            Submitting...
+                          </span>
+                        ) : (
+                          "Submit application"
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -540,6 +913,75 @@ export default function DietitianEnrollmentPage() {
           )}
         </div>
       </div>
+
+      {/* Email Exists Modal */}
+      {emailExistsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-[#171717] border border-[#262626] rounded-lg w-full max-w-md p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-[#f9fafb]">Email Already Registered</h2>
+              <button
+                onClick={() => setEmailExistsModalOpen(false)}
+                className="text-[#D4D4D4] hover:text-[#f9fafb] transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-[#D4D4D4] mb-6">
+              This email is already registered. Please go to login to access your account.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setEmailExistsModalOpen(false)}
+                className="flex-1 border-white/20 text-white hover:bg-white/10"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.location.href = "/dietitian-login";
+                  }
+                }}
+                className="flex-1 bg-white text-black hover:bg-white/90"
+              >
+                Go to Login
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 48 48"
+        className="w-4 h-4"
+      >
+        <path
+          fill="#EA4335"
+          d="M24 9.5c3.15 0 5.81 1.08 7.96 2.85l5.95-5.95C33.63 2.3 29.18 0.5 24 0.5 14.7 0.5 6.61 5.97 2.87 13.55l7.12 5.52C12.2 13.9 17.64 9.5 24 9.5z"
+        />
+        <path
+          fill="#4285F4"
+          d="M46.5 24.5c0-1.57-.14-3.07-.39-4.5H24v9h12.65c-.55 2.86-2.2 5.3-4.7 6.93l7.36 5.72C43.77 37.9 46.5 31.7 46.5 24.5z"
+        />
+        <path
+          fill="#FBBC05"
+          d="M10.23 28.93A14.46 14.46 0 0 1 9.5 24c0-1.7.29-3.34.79-4.87l-7.12-5.52A23.95 23.95 0 0 0 .5 24c0 3.9.93 7.58 2.57 10.87l7.16-5.94z"
+        />
+        <path
+          fill="#34A853"
+          d="M24 47.5c6.5 0 11.94-2.15 15.92-5.85l-7.36-5.72C30.52 37.53 27.42 38.5 24 38.5c-6.36 0-11.8-4.4-13.95-10.5l-7.12 5.52C6.61 42.03 14.7 47.5 24 47.5z"
+        />
+        <path fill="none" d="M0 0h48v48H0z" />
+      </svg>
+    </span>
   );
 }

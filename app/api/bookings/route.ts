@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { createAdminClientServer } from "@/lib/supabase/server";
+import { getCurrentUserFromRequest } from "@/lib/auth-helpers";
+import { emailQueue } from "@/lib/email/queue";
+import dayjs from "dayjs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,20 +16,48 @@ export async function POST(request: NextRequest) {
       phone,
       notes,
       paystackRef,
+      dietitianId,
+      sessionRequestId,
+      paymentData,
+      userAge,
+      userOccupation,
+      userMedicalCondition,
+      userMonthlyFoodBudget,
+      userComplaint,
     } = body;
 
-    // Get event type to find dietitian
-    const { data: eventType, error: eventTypeError } = await supabaseAdmin
-      .from("event_types")
-      .select("*, users(*)")
-      .eq("id", eventTypeId)
-      .single();
+    const supabaseAdmin = createAdminClientServer();
 
-    if (eventTypeError || !eventType) {
-      return NextResponse.json(
-        { error: "Event type not found" },
-        { status: 404 }
-      );
+    // Get event type to find dietitian
+    let eventType;
+    let dietitian_id;
+
+    if (dietitianId) {
+      // If dietitianId is provided (from pre-fill), use it
+      dietitian_id = dietitianId;
+      const { data: eventTypeData, error: eventTypeError } = await supabaseAdmin
+        .from("event_types")
+        .select("*")
+        .eq("id", eventTypeId)
+        .single();
+
+      if (eventTypeError || !eventTypeData) {
+        return NextResponse.json({ error: "Event type not found" }, { status: 404 });
+      }
+      eventType = eventTypeData;
+    } else {
+      // Legacy flow - get from event type
+      const { data: eventTypeData, error: eventTypeError } = await supabaseAdmin
+        .from("event_types")
+        .select("*, users(*)")
+        .eq("id", eventTypeId)
+        .single();
+
+      if (eventTypeError || !eventTypeData) {
+        return NextResponse.json({ error: "Event type not found" }, { status: 404 });
+      }
+      eventType = eventTypeData;
+      dietitian_id = eventType.user_id;
     }
 
     // Create or get user by email
@@ -42,6 +73,8 @@ export async function POST(request: NextRequest) {
         .insert({
           email,
           name,
+          role: "USER",
+          account_status: "ACTIVE",
         })
         .select()
         .single();
@@ -55,18 +88,28 @@ export async function POST(request: NextRequest) {
       user = newUser;
     }
 
+    // Calculate end time if not provided
+    const startTimeDate = new Date(startTime);
+    const durationMinutes = eventType.length || 30;
+    const endTimeDate = endTime ? new Date(endTime) : new Date(startTimeDate.getTime() + durationMinutes * 60000);
+
     // Create booking
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from("bookings")
       .insert({
         title: eventType.title,
-        description: notes,
-        start_time: startTime,
-        end_time: endTime,
+        description: userComplaint || notes,
+        start_time: startTimeDate.toISOString(),
+        end_time: endTimeDate.toISOString(),
         status: "PENDING",
         event_type_id: eventTypeId,
         user_id: user.id,
-        dietitian_id: eventType.user_id,
+        dietitian_id: dietitian_id || eventType.user_id,
+        user_age: userAge,
+        user_occupation: userOccupation,
+        user_medical_condition: userMedicalCondition,
+        user_monthly_food_budget: userMonthlyFoodBudget,
+        user_complaint: userComplaint,
       })
       .select()
       .single();
@@ -78,36 +121,75 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create payment
-    const { data: payment, error: paymentError } = await supabaseAdmin
-      .from("payments")
-      .insert({
-        amount: eventType.price,
-        currency: eventType.currency,
-        status: paystackRef ? "SUCCESS" : "PENDING",
-        paystack_ref: paystackRef || null,
+    // Create payment record if paystackRef or paymentData is provided
+    if (paystackRef || paymentData) {
+      await supabaseAdmin.from("payments").insert({
+        amount: eventType.price || 0,
+        currency: eventType.currency || "NGN",
+        status: "SUCCESS",
+        paystack_ref: paystackRef || paymentData?.transactionId,
         booking_id: booking.id,
-      })
-      .select()
-      .single();
-
-    if (paymentError) {
-      console.error("Payment creation error:", paymentError);
-      // Continue even if payment creation fails - booking is created
+      });
     }
 
-    // Fetch booking with relations
-    const { data: bookingWithRelations } = await supabaseAdmin
-      .from("bookings")
-      .select(`
-        *,
-        event_types (*),
-        payments (*)
-      `)
-      .eq("id", booking.id)
-      .single();
+    // Update session request status if sessionRequestId is provided
+    if (sessionRequestId) {
+      // TODO: Update session_requests table status to APPROVED
+      console.log(`Session request ${sessionRequestId} approved for booking ${booking.id}`);
+    }
 
-    return NextResponse.json({ booking: bookingWithRelations }, { status: 201 });
+    // Send booking confirmation email if payment was already successful
+    if (paystackRef || paymentData) {
+      try {
+        // Get user and dietitian details for email
+        const { data: userData } = await supabaseAdmin
+          .from("users")
+          .select("name, email")
+          .eq("id", user.id)
+          .single();
+
+        const { data: dietitianData } = await supabaseAdmin
+          .from("users")
+          .select("name, email")
+          .eq("id", dietitian_id)
+          .single();
+
+        if (userData?.email) {
+          await emailQueue.enqueue({
+            to: userData.email,
+            subject: "Booking Confirmed - Your Consultation is Scheduled",
+            template: "booking_confirmation",
+            data: {
+              userName: userData.name || "User",
+              eventTitle: eventType.title || "Consultation",
+              date: dayjs(startTime).format("MMMM D, YYYY"),
+              time: dayjs(startTime).format("h:mm A"),
+              meetingLink: "", // Will be updated when Google Calendar event is created
+            },
+          });
+        }
+
+        if (dietitianData?.email) {
+          await emailQueue.enqueue({
+            to: dietitianData.email,
+            subject: "New Booking Confirmed",
+            template: "booking_confirmation",
+            data: {
+              userName: dietitianData.name || "Dietitian",
+              eventTitle: eventType.title || "Consultation",
+              date: dayjs(startTime).format("MMMM D, YYYY"),
+              time: dayjs(startTime).format("h:mm A"),
+              meetingLink: "",
+            },
+          });
+        }
+      } catch (emailError) {
+        console.error("Error enqueueing booking confirmation email:", emailError);
+        // Don't fail the booking creation if email fails
+      }
+    }
+
+    return NextResponse.json({ booking }, { status: 201 });
   } catch (error: any) {
     console.error("Error creating booking:", error);
     return NextResponse.json(
@@ -117,27 +199,43 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// GET: Fetch bookings for authenticated user (dietitian or regular user)
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const userId = searchParams.get("userId");
+    const currentUser = await getCurrentUserFromRequest(request);
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "userId is required" },
-        { status: 400 }
-      );
+    if (!currentUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: bookings, error } = await supabaseAdmin
-      .from("bookings")
-      .select(`
-        *,
-        event_types (*),
-        payments (*)
-      `)
-      .eq("user_id", userId)
-      .order("start_time", { ascending: true });
+    const supabaseAdmin = createAdminClientServer();
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get("status");
+    const dietitianId = searchParams.get("dietitianId");
+
+    let query = supabaseAdmin.from("bookings").select("*");
+
+    if (currentUser.role === "DIETITIAN") {
+      // Dietitians see their own bookings
+      query = query.eq("dietitian_id", currentUser.id);
+    } else {
+      // Regular users see bookings they created
+      query = query.eq("user_id", currentUser.id);
+    }
+
+    // Filter by status if provided
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    // Filter by dietitian if provided (for users viewing specific dietitian)
+    if (dietitianId && dietitianId !== "current" && currentUser.role === "USER") {
+      query = query.eq("dietitian_id", dietitianId);
+    }
+
+    query = query.order("start_time", { ascending: false });
+
+    const { data: bookings, error } = await query;
 
     if (error) {
       return NextResponse.json(

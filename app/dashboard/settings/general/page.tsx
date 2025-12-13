@@ -33,7 +33,8 @@ export default function GeneralPage() {
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
+              disabled
+              className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040] opacity-50 cursor-not-allowed"
             >
               <option value="English">English</option>
               <option value="Spanish">Spanish</option>
@@ -53,7 +54,8 @@ export default function GeneralPage() {
             <select
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
+              disabled
+              className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040] opacity-50 cursor-not-allowed"
             >
               <option value="Africa/Lagos">Africa/Lagos</option>
               <option value="America/New_York">America/New_York</option>
@@ -64,7 +66,8 @@ export default function GeneralPage() {
           </div>
           <Button
             variant="outline"
-            className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-4 py-2"
+            disabled
+            className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-4 py-2 opacity-50 cursor-not-allowed"
           >
             <Calendar className="h-4 w-4 mr-2" />
             Schedule timezone change
@@ -80,7 +83,8 @@ export default function GeneralPage() {
             <select
               value={timeFormat}
               onChange={(e) => setTimeFormat(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
+              disabled
+              className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040] opacity-50 cursor-not-allowed"
             >
               <option value="12 hour">12 hour</option>
               <option value="24 hour">24 hour</option>
@@ -101,7 +105,8 @@ export default function GeneralPage() {
             <select
               value={startOfWeek}
               onChange={(e) => setStartOfWeek(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
+              disabled
+              className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040] opacity-50 cursor-not-allowed"
             >
               <option value="Sunday">Sunday</option>
               <option value="Monday">Monday</option>
@@ -117,7 +122,7 @@ export default function GeneralPage() {
 
         {/* Update Button */}
         <div>
-          <Button className="bg-[#404040] hover:bg-[#525252] text-[#f9fafb] px-4 py-2">
+          <Button disabled className="bg-[#404040] hover:bg-[#525252] text-[#f9fafb] px-4 py-2 opacity-50 cursor-not-allowed">
             Update
           </Button>
         </div>
@@ -135,11 +140,12 @@ export default function GeneralPage() {
               Allow attendees to book you through dynamic group bookings.
             </p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer ml-4">
+          <label className="relative inline-flex items-center cursor-not-allowed ml-4 opacity-50">
             <input
               type="checkbox"
               checked={dynamicGroupLinks}
               onChange={(e) => setDynamicGroupLinks(e.target.checked)}
+              disabled
               className="sr-only peer"
             />
             <div className="w-11 h-6 bg-[#374151] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#9ca3af]"></div>
@@ -156,11 +162,12 @@ export default function GeneralPage() {
               Allow search engines to access your public content.
             </p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer ml-4">
+          <label className="relative inline-flex items-center cursor-not-allowed ml-4 opacity-50">
             <input
               type="checkbox"
               checked={searchEngineIndexing}
               onChange={(e) => setSearchEngineIndexing(e.target.checked)}
+              disabled
               className="sr-only peer"
             />
             <div className="w-11 h-6 bg-[#374151] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#9ca3af]"></div>

@@ -15,14 +15,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { bookingId, amount, email, name } = await request.json();
+    const { bookingId, amount, email, name, metadata } = await request.json();
 
-    if (!bookingId || !amount || !email) {
+    if (!amount || !email) {
       return NextResponse.json(
-        { error: "bookingId, amount, and email are required" },
+        { error: "amount and email are required" },
         { status: 400 }
       );
     }
+
+    // Get callback URL
+    const callbackUrl = process.env.NEXT_PUBLIC_SITE_URL 
+      ? `${process.env.NEXT_PUBLIC_SITE_URL}/api/paystack/callback`
+      : `${request.headers.get("origin") || "http://localhost:3000"}/api/paystack/callback`;
 
     // Initialize transaction with Paystack (amount expected in kobo)
     const initRes = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
@@ -33,11 +38,13 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         email,
-        amount,
+        amount: amount, // Already in kobo from client
         currency: "NGN",
+        callback_url: callbackUrl, // Redirect back after payment
         metadata: {
-          bookingId,
-          name,
+          bookingId: bookingId || undefined,
+          name: name || undefined,
+          ...metadata, // Merge additional metadata
         },
       }),
     });

@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getOAuth2Client } from "@/lib/google-calendar";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+import { createClient } from "@/lib/supabase/server/client";
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -13,11 +10,11 @@ export async function GET(request: NextRequest) {
   const error = requestUrl.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/?error=${error}`, request.url));
+    return NextResponse.redirect(new URL(`/dashboard/settings/calendars?error=${error}`, request.url));
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/dashboard/settings/calendars?error=no_code", request.url));
   }
 
   try {
@@ -29,19 +26,16 @@ export async function GET(request: NextRequest) {
       throw new Error("Failed to get tokens from Google");
     }
 
-    // Get user from Supabase session
-    // Note: Supabase handles its own OAuth flow, so we need to get the user from the session
-    // This callback is specifically for Google Calendar API tokens
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    
-    // Try to get session from cookies or create a new session
+    // Get user from Supabase session using proper server client
+    const supabase = await createClient();
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    if (!session?.user) {
+    if (userError || !user) {
       // If no session, redirect to login
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL("/dietitian-login?redirect=/dashboard/settings/calendars", request.url));
     }
 
     // Calculate expiry (default to 1 hour if not provided)
@@ -52,7 +46,7 @@ export async function GET(request: NextRequest) {
     // Store tokens in database
     await supabaseAdmin.from("google_oauth_tokens").upsert(
       {
-        user_id: session.user.id,
+        user_id: user.id,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_at: expiresAt,
@@ -64,9 +58,9 @@ export async function GET(request: NextRequest) {
 
     // Redirect based on state or default
     const redirectPath = state ? decodeURIComponent(state) : "/dashboard/settings/calendars";
-    return NextResponse.redirect(new URL(redirectPath, request.url));
+    return NextResponse.redirect(new URL(`${redirectPath}?connected=true`, request.url));
   } catch (error) {
     console.error("Error in Google OAuth callback:", error);
-    return NextResponse.redirect(new URL("/?error=oauth_failed", request.url));
+    return NextResponse.redirect(new URL("/dashboard/settings/calendars?error=oauth_failed", request.url));
   }
 }

@@ -4,36 +4,53 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
+import { createComponentClient } from "@/lib/supabase/client";
+import { authConfig } from "@/lib/auth/config";
 
 interface AuthScreenProps {
   title: string;
   subtitle: string;
   redirectPath?: string;
+  source?: string; // Track where OAuth was initiated (e.g., "dietitian-login")
 }
 
-export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard" }: AuthScreenProps) {
+export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard", source }: AuthScreenProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleGoogle = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const supabase = createComponentClient();
+
+      // FIXED: Let Supabase handle state - don't use custom state
+      // Add source parameter to track where OAuth was initiated
+      const callbackUrl = source 
+        ? `${window.location.origin}/auth/callback?source=${encodeURIComponent(source)}`
+        : `${window.location.origin}/auth/callback`;
+      
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`,
+          redirectTo: callbackUrl,
+          queryParams: {
+            access_type: authConfig.providers.google.additionalParams.access_type,
+            prompt: authConfig.providers.google.additionalParams.prompt,
+          },
+          scopes: authConfig.providers.google.scopes.join(" "),
         },
       });
 
       if (error) {
+        console.error("OAuth initiation error:", error);
         setError(error.message);
         setIsLoading(false);
       }
-      // OAuth will redirect, so we don't need to handle success here
+      // OAuth will redirect automatically - don't handle success here
     } catch (err) {
+      console.error("OAuth error:", err);
       setError(err instanceof Error ? err.message : "Failed to sign in with Google");
       setIsLoading(false);
     }
@@ -90,14 +107,12 @@ export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard" }
             <Button
               onClick={handleGoogle}
               disabled={isLoading}
-              className="h-12 sm:h-12 w-full sm:w-auto px-6 bg-white text-black hover:bg-white/90 border border-white/30 transition-colors inline-flex items-center justify-center gap-2"
+              className="h-14 sm:h-12 w-full sm:w-auto min-w-[200px] px-6 bg-white text-black hover:bg-white/90 border border-white/30 transition-colors inline-flex items-center justify-center gap-2 text-base sm:text-sm font-medium"
             >
               <GoogleIcon />
               {isLoading ? "Connecting..." : "Continue with Google"}
             </Button>
-            {error && (
-              <p className="text-sm text-red-300 max-w-md">{error}</p>
-            )}
+            {error && <p className="text-sm text-red-300 max-w-md">{error}</p>}
           </div>
         </div>
 
@@ -112,11 +127,7 @@ export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard" }
 function GoogleIcon() {
   return (
     <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 48 48"
-        className="w-4 h-4"
-      >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4">
         <path
           fill="#EA4335"
           d="M24 9.5c3.15 0 5.81 1.08 7.96 2.85l5.95-5.95C33.63 2.3 29.18 0.5 24 0.5 14.7 0.5 6.61 5.97 2.87 13.55l7.12 5.52C12.2 13.9 17.64 9.5 24 9.5z"

@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserDashboardSidebar } from "@/components/layout/user-dashboard-sidebar";
 import { Button } from "@/components/ui/button";
 import { FileText, Eye, Download, ShoppingCart, Clock } from "lucide-react";
 import { PurchaseMealPlanModal } from "@/components/meal-plan/PurchaseMealPlanModal";
+import { useMealPlansStream } from "@/hooks/useMealPlansStream";
+import { MEAL_PLAN_PACKAGES } from "@/lib/constants/meal-plans";
+import { PaymentModal } from "@/components/user/payment-modal";
 
 interface MealPlan {
   id: string;
   packageName: string;
   receivedDate: Date;
   pdfUrl: string;
-  status: "pending" | "received";
+  status: "pending" | "received" | "paid-pending";
   dieticianName?: string;
   purchasedDate?: Date;
 }
@@ -24,118 +27,111 @@ interface MealPlanPackage {
   currency: string;
 }
 
-// Mock available meal plan packages - in production, fetch from API
-const availablePackages: MealPlanPackage[] = [
-  {
-    id: "1",
-    name: "Weight Loss Plan",
-    description: "A comprehensive 4-week meal plan designed to help you achieve your weight loss goals",
-    price: 15000,
-    currency: "NGN",
-  },
-  {
-    id: "2",
-    name: "Muscle Gain Plan",
-    description: "High-protein meal plan to support muscle growth and recovery",
-    price: 18000,
-    currency: "NGN",
-  },
-  {
-    id: "3",
-    name: "Diabetes Management Plan",
-    description: "Carefully curated meals to help manage blood sugar levels",
-    price: 20000,
-    currency: "NGN",
-  },
-  {
-    id: "4",
-    name: "General Wellness Plan",
-    description: "Balanced nutrition plan for overall health and wellness",
-    price: 12000,
-    currency: "NGN",
-  },
-];
-
-// Mock data - in production, fetch from API
-const mockReceivedMealPlans: MealPlan[] = [
-  {
-    id: "1",
-    packageName: "Weight Loss Plan",
-    receivedDate: new Date("2024-12-10"),
-    pdfUrl: "/meal-plans/weight-loss-plan.pdf",
-    status: "received",
-  },
-  {
-    id: "2",
-    packageName: "Muscle Gain Plan",
-    receivedDate: new Date("2024-12-05"),
-    pdfUrl: "/meal-plans/muscle-gain-plan.pdf",
-    status: "received",
-  },
-];
-
-const mockPendingMealPlans: MealPlan[] = [
-  {
-    id: "3",
-    packageName: "Diabetes Management Plan",
-    purchasedDate: new Date("2024-12-15"),
-    dieticianName: "Dr. Sarah Johnson",
-    status: "pending",
-    receivedDate: new Date(),
-    pdfUrl: "",
-  },
-];
-
-// Mock dieticians - in production, fetch from API based on user's bookings
-const mockDieticians = [
-  {
-    id: "1",
-    name: "Dr. Sarah Johnson",
-    email: "sarah@example.com",
-  },
-  {
-    id: "2",
-    name: "Dr. Michael Chen",
-    email: "michael@example.com",
-  },
-  {
-    id: "3",
-    name: "Dr. Emily Davis",
-    email: "emily@example.com",
-  },
-];
-
 export default function UserMealPlanPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<{ id: string; name: string; price: number; currency: string } | null>(null);
-  const [pendingPlans, setPendingPlans] = useState<MealPlan[]>(mockPendingMealPlans);
-  const [receivedPlans, setReceivedPlans] = useState<MealPlan[]>(mockReceivedMealPlans);
+  const [pendingPlans, setPendingPlans] = useState<MealPlan[]>([]);
+  const [sessionRequests, setSessionRequests] = useState<any[]>([]);
 
-  const handlePurchaseClick = (pkg: MealPlanPackage) => {
+  // Use SSE for real-time meal plans
+  const { mealPlans, isConnected, error: mealPlansError } = useMealPlansStream();
+  const [initialMealPlansLoaded, setInitialMealPlansLoaded] = useState(false);
+
+  // Preload meal plans data immediately
+  useEffect(() => {
+    const fetchInitialMealPlans = async () => {
+      try {
+        const response = await fetch("/api/meal-plans", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          setInitialMealPlansLoaded(true);
+        }
+      } catch (err) {
+        console.error("Error preloading meal plans:", err);
+      }
+    };
+    fetchInitialMealPlans();
+  }, []);
+
+  // Fetch pending meal plans from session requests
+  useEffect(() => {
+    const fetchSessionRequests = async () => {
+      try {
+        const response = await fetch("/api/user/session-requests", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const mealPlanRequests = (data.requests || []).filter(
+            (req: any) => req.requestType === "MEAL_PLAN" && req.status === "PENDING"
+          );
+          setSessionRequests(mealPlanRequests);
+          
+          // Map to pending plans
+          setPendingPlans(
+            mealPlanRequests.map((req: any) => ({
+              id: req.id,
+              packageName: req.mealPlanType || "Custom Meal Plan",
+              purchasedDate: new Date(req.createdAt),
+              dieticianName: req.dietitian?.name || "Unknown",
+              status: "pending" as const,
+              receivedDate: new Date(),
+              pdfUrl: "",
+            }))
+          );
+        }
+      } catch (error) {
+        console.error("Error fetching session requests:", error);
+      }
+    };
+
+    fetchSessionRequests();
+  }, []);
+
+  // Separate meal plans into pending and received
+  const receivedMealPlans = mealPlans.filter((mp) => mp.status === "SENT" && mp.fileUrl);
+  const paidPendingMealPlans = mealPlans.filter((mp) => mp.status === "SENT" && !mp.fileUrl);
+
+  const handlePurchaseClick = (pkg: typeof MEAL_PLAN_PACKAGES[0]) => {
     setSelectedPackage({
       id: pkg.id,
       name: pkg.name,
       price: pkg.price,
       currency: pkg.currency,
     });
-    setIsModalOpen(true);
+    setIsPaymentModalOpen(true);
   };
 
-  const handleCheckout = (data: { dieticianId: string; packageName: string; packageId: string; price: number }) => {
-    // In production, this would redirect to checkout/payment page
-    // For now, add to pending plans
-    const dietician = mockDieticians.find((d) => d.id === data.dieticianId);
-    const newPendingPlan: MealPlan = {
-      id: String(Date.now()),
-      packageName: data.packageName,
-      purchasedDate: new Date(),
-      dieticianName: dietician?.name || "Unknown",
-      status: "pending",
-      receivedDate: new Date(),
-      pdfUrl: "",
-    };
-    setPendingPlans((prev) => [...prev, newPendingPlan]);
-    console.log("Proceeding to checkout:", data);
+  const handlePaymentSuccess = async (paymentData: any) => {
+    if (!selectedPackage) return;
+
+    try {
+      // Create meal plan record
+      const response = await fetch("/api/meal-plans", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: "current-user", // Will be determined server-side
+          packageName: selectedPackage.name,
+          price: selectedPackage.price,
+          currency: selectedPackage.currency,
+          paymentData,
+        }),
+      });
+
+      if (response.ok) {
+        setIsPaymentModalOpen(false);
+        setSelectedPackage(null);
+        // Meal plan will appear via SSE stream
+      }
+    } catch (err) {
+      console.error("Error creating meal plan:", err);
+    }
   };
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex">
@@ -173,8 +169,17 @@ export default function UserMealPlanPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-[#9ca3af]" />
-                        <span className="text-sm text-[#9ca3af]">Pending</span>
+                        {plan.status === "paid-pending" ? (
+                          <>
+                            <Clock className="h-4 w-4 text-yellow-400" />
+                            <span className="text-sm text-yellow-400">Paid & Pending</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="h-4 w-4 text-[#9ca3af]" />
+                            <span className="text-sm text-[#9ca3af]">Pending</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -188,11 +193,12 @@ export default function UserMealPlanPage() {
             )}
           </div>
 
+
           {/* Available Packages Section */}
           <div className="mb-8">
             <h2 className="text-sm font-semibold text-[#f9fafb] mb-4">Available Meal Plans</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {availablePackages.map((pkg) => (
+              {MEAL_PLAN_PACKAGES.map((pkg) => (
                 <div
                   key={pkg.id}
                   className="border border-[#262626] rounded-lg px-6 py-4 bg-transparent hover:bg-[#171717] transition-colors"
@@ -227,9 +233,9 @@ export default function UserMealPlanPage() {
           {/* Received Meal Plans Section */}
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-[#f9fafb] mb-4">Received Meal Plans</h2>
-            {receivedPlans.length > 0 ? (
+            {receivedMealPlans.length > 0 ? (
               <div className="space-y-4">
-                {receivedPlans.map((plan) => (
+                {receivedMealPlans.map((plan) => (
                   <div
                     key={plan.id}
                     className="border border-[#262626] rounded-lg px-6 py-4 bg-transparent hover:bg-[#171717] transition-colors"
@@ -239,32 +245,39 @@ export default function UserMealPlanPage() {
                         <div className="text-sm font-medium text-[#f9fafb] mb-1">
                           {plan.packageName}
                         </div>
+                        <div className="text-sm text-[#9ca3af] mb-1">
+                          From: {plan.dietitianName}
+                        </div>
                         <div className="text-sm text-[#9ca3af]">
-                          Received on {plan.receivedDate.toLocaleDateString()}
+                          Received on {plan.sentAt ? new Date(plan.sentAt).toLocaleDateString() : "N/A"}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button
-                          onClick={() => window.open(plan.pdfUrl, '_blank')}
-                          variant="outline"
-                          className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-4 py-2"
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            const link = document.createElement('a');
-                            link.href = plan.pdfUrl;
-                            link.download = `${plan.packageName}.pdf`;
-                            link.click();
-                          }}
-                          variant="outline"
-                          className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-4 py-2"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </Button>
+                        {plan.fileUrl && (
+                          <>
+                            <Button
+                              onClick={() => window.open(plan.fileUrl, '_blank')}
+                              variant="outline"
+                              className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-4 py-2"
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = plan.fileUrl!;
+                                link.download = `${plan.packageName}.pdf`;
+                                link.click();
+                              }}
+                              variant="outline"
+                              className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-4 py-2"
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Download
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -280,16 +293,23 @@ export default function UserMealPlanPage() {
         </div>
       </main>
 
-      {/* Purchase Meal Plan Modal */}
-      <PurchaseMealPlanModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setSelectedPackage(null);
-        }}
-        selectedPackage={selectedPackage}
-        onCheckout={handleCheckout}
-      />
+      {/* Payment Modal */}
+      {selectedPackage && (
+        <PaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            setSelectedPackage(null);
+          }}
+          onSuccess={handlePaymentSuccess}
+          amount={selectedPackage.price}
+          currency={selectedPackage.currency}
+          description={`Meal Plan: ${selectedPackage.name}`}
+          requestType="MEAL_PLAN"
+          userEmail=""
+          userName=""
+        />
+      )}
     </div>
   );
 }

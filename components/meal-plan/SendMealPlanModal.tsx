@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, ChevronDown, X } from "lucide-react";
@@ -9,33 +9,15 @@ interface User {
   id: string;
   name: string;
   email: string;
-  hasSessions: boolean;
-  hasMealPlanPackage: boolean;
+  sessionRequestId?: string;
+  mealPlanType?: string;
 }
 
 interface SendMealPlanModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSend: (data: { userId: string; packageName: string; file: File }) => void;
+  onSend: (data: { userId: string; sessionRequestId?: string; packageName: string; file: File }) => void;
 }
-
-// Mock users - in production, fetch from API (filtered to only show users with sessions and meal plan packages)
-const mockUsers: User[] = [
-  {
-    id: "1",
-    name: "Michael Opeyemi",
-    email: "michael@example.com",
-    hasSessions: true,
-    hasMealPlanPackage: true,
-  },
-  {
-    id: "2",
-    name: "Opeyemi Michael Asere",
-    email: "opeyemi@example.com",
-    hasSessions: true,
-    hasMealPlanPackage: true,
-  },
-];
 
 const mealPlanPackages = [
   "Weight Loss Plan",
@@ -45,10 +27,53 @@ const mealPlanPackages = [
 ];
 
 export function SendMealPlanModal({ isOpen, onClose, onSend }: SendMealPlanModalProps) {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string>("");
   const [selectedPackage, setSelectedPackage] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch users with pending meal plan requests
+  useEffect(() => {
+    if (isOpen) {
+      fetchPendingMealPlanUsers();
+    }
+  }, [isOpen]);
+
+  const fetchPendingMealPlanUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/session-request", {
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const mealPlanRequests = (data.requests || []).filter(
+          (req: any) => req.requestType === "MEAL_PLAN" && req.status === "PENDING"
+        );
+
+        const usersData: User[] = mealPlanRequests.map((req: any) => ({
+          id: req.clientEmail, // Using email as identifier
+          name: req.clientName,
+          email: req.clientEmail,
+          sessionRequestId: req.id,
+          mealPlanType: req.mealPlanType,
+        }));
+
+        setUsers(usersData);
+      }
+    } catch (err) {
+      console.error("Error fetching pending meal plan users:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -62,8 +87,10 @@ export function SendMealPlanModal({ isOpen, onClose, onSend }: SendMealPlanModal
 
   const handleSend = () => {
     if (selectedUser && selectedPackage && selectedFile) {
+      const selectedUserData = users.find(u => u.id === selectedUser);
       onSend({
         userId: selectedUser,
+        sessionRequestId: selectedUserData?.sessionRequestId,
         packageName: selectedPackage,
         file: selectedFile,
       });
@@ -72,7 +99,7 @@ export function SendMealPlanModal({ isOpen, onClose, onSend }: SendMealPlanModal
       setSelectedPackage("");
       setSelectedFile(null);
       setFileName("");
-      onClose();
+      setError(null);
     }
   };
 
@@ -106,12 +133,13 @@ export function SendMealPlanModal({ isOpen, onClose, onSend }: SendMealPlanModal
               <select
                 value={selectedUser}
                 onChange={(e) => setSelectedUser(e.target.value)}
-                className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
+                disabled={loading}
+                className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <option value="">Select a user...</option>
-                {mockUsers.map((user) => (
+                <option value="">{loading ? "Loading users..." : "Select a user..."}</option>
+                {users.map((user) => (
                   <option key={user.id} value={user.id}>
-                    {user.name} ({user.email})
+                    {user.name} ({user.email}) {user.mealPlanType ? `- ${user.mealPlanType}` : ""}
                   </option>
                 ))}
               </select>
@@ -173,6 +201,13 @@ export function SendMealPlanModal({ isOpen, onClose, onSend }: SendMealPlanModal
             </div>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-900/20 border border-red-800 rounded-lg">
+            <p className="text-sm text-red-200">{error}</p>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-3">

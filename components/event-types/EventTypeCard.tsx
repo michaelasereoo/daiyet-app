@@ -1,9 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Clock, Share2, Copy as CopyIcon, MoreVertical } from "lucide-react";
 
 interface EventTypeCardProps {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  duration: number;
+  price: number;
+  currency?: string;
+  guests?: number;
+  isActive?: boolean;
+  isHidden?: boolean;
+  dietitianName?: string;
+}
+
+interface EventTypeCardProps {
+  id: string;
   title: string;
   slug: string;
   description: string;
@@ -17,6 +33,7 @@ interface EventTypeCardProps {
 }
 
 export function EventTypeCard({
+  id,
   title,
   slug,
   description,
@@ -28,17 +45,53 @@ export function EventTypeCard({
   isHidden = false,
   dietitianName = "dietitian",
 }: EventTypeCardProps) {
+  const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
-  const [isToggled, setIsToggled] = useState(!isHidden);
+  const [isToggled, setIsToggled] = useState(isActive);
+  const [updating, setUpdating] = useState(false);
+
+  const handleCardClick = () => {
+    router.push(`/dashboard/event-types/${id}`);
+  };
+
+  const handleToggleChange = async (checked: boolean) => {
+    setIsToggled(checked);
+    setUpdating(true);
+    
+    try {
+      const response = await fetch(`/api/event-types/${id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          active: checked,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update event type");
+      }
+    } catch (err) {
+      console.error("Error updating event type:", err);
+      setIsToggled(!checked); // Revert on error
+      alert(err instanceof Error ? err.message : "Failed to update event type");
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   return (
     <div 
-      className="w-full border border-[#262626] rounded-lg px-6 py-4 transition-colors mb-4"
+      className="w-full border border-[#262626] rounded-lg px-6 py-4 transition-colors mb-4 cursor-pointer"
       style={{ 
         backgroundColor: isHovered || isActive ? '#171717' : 'transparent'
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={handleCardClick}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
@@ -61,18 +114,22 @@ export function EventTypeCard({
 
         <div className="flex items-center gap-4 ml-6">
           {/* Toggle Switch */}
-          <label className="relative inline-flex items-center cursor-pointer">
+          <label 
+            className="relative inline-flex items-center cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+          >
             <input
               type="checkbox"
               checked={isToggled}
-              onChange={() => setIsToggled(!isToggled)}
+              onChange={(e) => handleToggleChange(e.target.checked)}
+              disabled={updating}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-[#374151] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#9ca3af]"></div>
+            <div className={`w-11 h-6 bg-[#374151] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#9ca3af] ${updating ? 'opacity-50' : ''}`}></div>
           </label>
 
           {/* Action Icons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <button className="text-[#D4D4D4] hover:text-[#f9fafb] transition-colors">
               <Share2 className="h-5 w-5" />
             </button>
