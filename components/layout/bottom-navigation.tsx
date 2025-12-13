@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Calendar, Clock, MoreHorizontal, Phone, FileText } from "lucide-react";
+import { Calendar, Clock, MoreHorizontal, Phone, FileText, Link2, LayoutDashboard } from "lucide-react";
 
 interface NavItem {
   name: string;
@@ -12,7 +12,7 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
-  { name: "Event Types", href: "/dashboard/event-types", icon: LayoutDashboard },
+  { name: "Event Types", href: "/dashboard/event-types", icon: Link2 },
   { name: "Bookings", href: "/dashboard/bookings", icon: Calendar },
   { name: "Availability", href: "/dashboard/availability", icon: Clock },
   { name: "More", href: "/dashboard", icon: MoreHorizontal },
@@ -59,7 +59,7 @@ const userNavigation: NavItem[] = [
   { name: "Dashboard", href: "/user-dashboard", icon: LayoutDashboard },
   { name: "Book a Call", href: "/user-dashboard/book-a-call", icon: Phone },
   { name: "Meetings", href: "/user-dashboard/upcoming-meetings", icon: Calendar },
-  { name: "More", href: "/user-dashboard/meal-plan", icon: FileText },
+  { name: "Meal Plan", href: "/user-dashboard/meal-plan", icon: FileText },
 ];
 
 export function UserBottomNavigation() {

@@ -329,7 +329,7 @@ export default function AvailabilityDetailPage({ params }: { params: Promise<{ i
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex">
         <DashboardSidebar />
-        <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
+        <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:ml-64 lg:rounded-tl-lg">
           <div className="p-8">
             <div className="text-white">Loading schedule...</div>
           </div>
@@ -342,7 +342,7 @@ export default function AvailabilityDetailPage({ params }: { params: Promise<{ i
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex">
         <DashboardSidebar />
-        <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
+        <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:ml-64 lg:rounded-tl-lg">
           <div className="p-8">
             <button
               onClick={() => router.push("/dashboard/availability")}

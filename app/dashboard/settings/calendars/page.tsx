@@ -10,7 +10,7 @@ export default function CalendarsPage() {
   // DISABLED: Google Calendar functionality is disabled
 
   return (
-    <div className="p-8">
+    <div>
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">

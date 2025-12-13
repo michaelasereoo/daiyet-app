@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
-import { ArrowLeft, User, Settings as SettingsIcon, Calendar, Clock, Bell } from "lucide-react";
+import { SettingsMobileHeader } from "@/components/layout/settings-mobile-header";
+import { ArrowLeft, User, Settings as SettingsIcon, Calendar, Clock, Bell, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const settingsNavigation = [
@@ -21,15 +24,69 @@ export default function SettingsLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar when pathname changes on mobile
+  useEffect(() => {
+    if (sidebarOpen) {
+      setSidebarOpen(false);
+    }
+  }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col lg:flex-row">
       <DashboardSidebar />
-      <div className="flex-1 flex ml-64">
+      
+      {/* Mobile Header */}
+      <div className="lg:hidden">
+        <SettingsMobileHeader 
+          title="Settings"
+          onMenuClick={() => setSidebarOpen(true)}
+          backHref="/dashboard"
+        />
+      </div>
+
+      {/* Settings Sidebar Mobile Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <div className="flex-1 flex flex-col lg:flex-row w-full lg:w-auto lg:ml-64">
         {/* Settings Sidebar */}
-        <aside className="w-64 bg-[#0f0f0f] border-r border-[#262626] flex flex-col">
-          {/* Back Button */}
-          <div className="p-4 border-b border-[#262626]">
+        <aside className={cn(
+          "w-64 bg-[#0f0f0f] border-r border-[#262626] flex-col h-screen fixed lg:relative z-50",
+          "transform transition-transform duration-300 ease-in-out",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          "lg:flex"
+        )}>
+          {/* Mobile Close Button */}
+          {sidebarOpen && (
+            <div className="lg:hidden p-4 border-b border-[#262626] flex items-center justify-between">
+              <Link href="/" className="flex items-center gap-2">
+                <Image
+                  src="/daiyet logo.svg"
+                  alt="Daiyet"
+                  width={120}
+                  height={32}
+                  className="h-6 w-auto"
+                />
+              </Link>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="text-[#D4D4D4] hover:text-[#f9fafb] p-2 -mr-2"
+                aria-label="Close menu"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+
+          {/* Back Button - Desktop only */}
+          <div className="hidden lg:block p-4 border-b border-[#262626]">
             <button
               onClick={() => router.push("/dashboard")}
               className="flex items-center gap-2 text-sm text-[#D4D4D4] hover:text-[#f9fafb] transition-colors"
@@ -62,8 +119,10 @@ export default function SettingsLayout({
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 bg-[#101010] overflow-y-auto">
+        <main className="flex-1 bg-[#101010] overflow-y-auto w-full">
+          <div className="p-6 lg:p-8 pt-6 lg:pt-8">
           {children}
+          </div>
         </main>
       </div>
     </div>

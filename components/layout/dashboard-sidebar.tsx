@@ -131,51 +131,17 @@ export function DashboardSidebar({ isOpen = false, onClose }: DashboardSidebarPr
 
   return (
     <>
-      {/* Mobile Overlay */}
-      {isOpen && onClose && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={onClose}
-          aria-hidden="true"
-        />
-      )}
 
-      {/* Sidebar */}
+      {/* Sidebar - Hidden on mobile, always visible on desktop */}
       <aside
         className={cn(
           "w-64 bg-[#171717] flex flex-col h-screen fixed left-0 top-0 overflow-hidden z-50",
-          "transform transition-transform duration-300 ease-in-out",
-          // Mobile mode (when onClose exists): completely hidden by default, slide in when opened
-          onClose && !isOpen && "-translate-x-full",
-          onClose && isOpen && "translate-x-0",
+          "hidden lg:flex", // Hide completely on mobile, flex on desktop
           // Desktop mode (when onClose doesn't exist): always visible
           !onClose && "translate-x-0"
         )}
       >
-        {/* Mobile Close Button */}
-        {onClose && (
-          <div className="lg:hidden p-4 border-b border-[#374151] flex items-center justify-between">
-            <Link href="/" className="flex items-center">
-              <Image
-                src="/daiyet logo.svg"
-                alt="Daiyet"
-                width={120}
-                height={32}
-                className="h-8 w-auto"
-                style={{ width: "auto", height: "2rem" }}
-              />
-            </Link>
-            <button
-              onClick={onClose}
-              className="text-[#D4D4D4] hover:text-[#f9fafb] p-2 -mr-2"
-              aria-label="Close menu"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        )}
-      {/* Top Section with Logo and Search - Hidden on mobile if close button is shown */}
-      {!onClose && (
+      {/* Top Section with Logo and Search */}
         <div className="p-4 pb-3 flex-shrink-0 relative">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center">
@@ -193,28 +159,6 @@ export function DashboardSidebar({ isOpen = false, onClose }: DashboardSidebarPr
             </button>
           </div>
         </div>
-      )}
-
-      {/* Top Section with Logo and Search - Desktop only if close button exists */}
-      {onClose && (
-        <div className="hidden lg:block p-4 pb-3 flex-shrink-0 relative">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center">
-              <Image
-                src="/daiyet logo.svg"
-                alt="Daiyet"
-                width={120}
-                height={32}
-                className="h-8 w-auto"
-                style={{ width: "auto", height: "2rem" }}
-              />
-            </Link>
-            <button className="text-[#D4D4D4] hover:text-[#f9fafb]">
-              <Search className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Divider */}
       <div className="border-t border-[#374151] mx-4"></div>

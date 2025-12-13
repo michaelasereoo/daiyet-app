@@ -60,9 +60,9 @@ export default function SessionRequestClient() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex">
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col lg:flex-row">
         <DashboardSidebar />
-        <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
+        <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:w-auto lg:ml-64 lg:rounded-tl-lg">
           <div className="p-8">
             <div className="text-white">Loading...</div>
           </div>
@@ -75,7 +75,7 @@ export default function SessionRequestClient() {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex">
         <DashboardSidebar />
-        <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
+        <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:ml-64 lg:rounded-tl-lg">
           <div className="p-8">
             <div className="mb-6">
               <h1 className="text-[15px] font-semibold text-[#f9fafb] mb-1">Session Requests</h1>
@@ -97,9 +97,9 @@ export default function SessionRequestClient() {
   const pendingRequests = requests.filter(r => r.status === "PENDING");
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col lg:flex-row">
       <DashboardSidebar />
-      <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
+      <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:w-auto lg:ml-64 lg:rounded-tl-lg">
         <div className="p-8">
           {/* Header Section */}
           <div className="mb-6">

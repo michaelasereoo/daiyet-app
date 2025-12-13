@@ -39,8 +39,7 @@ function BookACallPageContent() {
   // Skip to step 3 (date/time) if pre-filled from consultation request (dietitian already selected)
   // Skip to step 3 if reschedule (all fields pre-filled, just need new date/time)
   const initialStep = isPrefill && prefillDietitianId ? 3 : isReschedule ? 3 : 1;
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialStep); // 5 is success screen
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7>(initialStep); // 4=time selection, 5=order summary, 6=unused (payment redirects), 7=success screen
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -604,14 +603,14 @@ function BookACallPageContent() {
                     meetingLink: booking.meeting_link || "",
                   });
                   
-                  // Set payment data for modal
+                  // Set payment data
                   setPaymentData({
                     amount: payment.amount || eventTypePrice,
                     currency: payment.currency || "NGN",
                   });
                   
-                  // Show success modal immediately (don't show page first)
-                  setIsSuccessModalOpen(true);
+                  // Navigate to success screen (step 7)
+                  setStep(7);
                   
                   // Clean URL (use setTimeout to avoid hydration issues)
                   setTimeout(() => {
@@ -937,17 +936,53 @@ function BookACallPageContent() {
 
           if (bookingResponse.ok) {
             const bookingData = await bookingResponse.json();
+            const bookingId = bookingData.booking?.id || `booking-${Date.now()}`;
+            
             // Store booking ID for payment
             setBookingDetails({
-              id: bookingData.booking?.id || `booking-${Date.now()}`,
+              id: bookingId,
               date: selectedDate,
               time: selectedTime,
               dietician: dietitians.find((d) => d.id === selectedDietician)?.name || "",
               duration: `${eventTypes.find(et => et.id === selectedEventTypeId)?.length || 45}m`,
               meetingLink: "",
             });
-            // Now open payment modal with booking ID
-            setIsPaymentModalOpen(true);
+            
+            // Initialize Paystack payment and redirect
+            try {
+              const paymentResponse = await fetch("/api/paystack/initialize", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  bookingId,
+                  amount: eventTypePrice * 100, // Convert to kobo
+                  email: finalEmail,
+                  name: finalName,
+                  metadata: {
+                    requestId: prefillRequestId || "",
+                    requestType: "CONSULTATION",
+                    description: `Consultation with ${dietitians.find(d => d.id === selectedDietician)?.name || "Dietitian"}`,
+                  },
+                }),
+              });
+
+              if (paymentResponse.ok) {
+                const paymentData = await paymentResponse.json();
+                if (paymentData.authorization_url) {
+                  // Redirect to Paystack payment page
+                  window.location.href = paymentData.authorization_url;
+                } else {
+                  throw new Error("No payment URL received");
+                }
+              } else {
+                throw new Error("Failed to initialize payment");
+              }
+            } catch (paymentErr) {
+              console.error("Payment initialization error:", paymentErr);
+              alert("Failed to initialize payment. Please try again.");
+            }
           } else {
             const errorData = await bookingResponse.json().catch(() => ({}));
             console.error("Failed to create booking:", errorData);
@@ -981,7 +1016,7 @@ function BookACallPageContent() {
         });
 
         if (response.ok) {
-          const dietician = mockDieticians.find((d) => d.id === selectedDietician);
+          const dietician = dietitians.find((d) => d.id === selectedDietician);
           setBookingDetails({
             date: selectedDate,
             time: selectedTime,
@@ -990,7 +1025,7 @@ function BookACallPageContent() {
             meetingLink: "https://meet.google.com/abc-defg-hij",
             isReschedule: true,
           });
-          setStep(5);
+          setStep(7);
         }
       } catch (err) {
         console.error("Error confirming reschedule:", err);
@@ -1050,7 +1085,7 @@ function BookACallPageContent() {
             duration: `${selectedEventType?.length || 45}m`,
             meetingLink: data.booking?.meeting_link || "",
           });
-          setIsSuccessModalOpen(true);
+          setStep(7);
           
           // Save/update user profile data
           try {
@@ -1091,43 +1126,50 @@ function BookACallPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
-      {/* Mobile Header */}
-      <UserMobileHeader onMenuClick={() => setSidebarOpen(true)} />
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col lg:flex-row">
+      {/* Mobile Header - Only on mobile */}
+      <div className="lg:hidden">
+        <UserMobileHeader />
+      </div>
       
-      {/* Sidebar - Hidden on mobile, opens from menu */}
-      <UserDashboardSidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)} 
-      />
+      {/* Sidebar - Hidden on mobile, always visible on desktop */}
+      <UserDashboardSidebar />
       
-      <main className="flex-1 bg-[#101010] overflow-y-auto lg:ml-64 rounded-tl-lg flex items-center justify-center p-4 lg:p-8 pb-20 lg:pb-8 pt-14 lg:pt-8 w-full">
+      <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:w-auto lg:ml-64 lg:rounded-tl-lg flex items-center justify-center p-4 lg:p-8 pb-20 lg:pb-8 pt-14 lg:pt-8">
         {/* Modal-like Container */}
         <div className="w-full max-w-7xl bg-[#171717] border border-[#262626] rounded-lg shadow-xl">
           {/* Step Indicator */}
-          {step < 5 && (
-            <div className="border-b border-[#262626] px-8 py-4">
-              <div className="flex items-center gap-2">
-                {[1, 2, 3, 4].map((s) => {
+          {step < 7 && (
+            <div className="border-b border-[#262626] px-4 sm:px-8 py-3 sm:py-4">
+              <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto">
+                {[1, 2, 3].map((s) => {
                   // Hide step 2 (dietitian selection) if pre-filled from consultation request
                   if (s === 2 && isPrefill && prefillDietitianId && !isReschedule) {
                     return null;
                   }
+                  // Step 3 in indicator represents steps 3-7 (date, time, summary, payment, success)
+                  const isStep3Active = step >= 3;
+                  const isStep2Active = step >= 2 || (s === 2 && isPrefill && prefillDietitianId);
+                  const isStep1Active = step >= 1;
+                  
                   return (
-                    <div key={s} className="flex items-center">
+                    <div key={s} className="flex items-center flex-shrink-0">
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                          step >= s || (s === 2 && isPrefill && prefillDietitianId)
+                        className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium ${
+                          (s === 1 && isStep1Active) || 
+                          (s === 2 && isStep2Active) || 
+                          (s === 3 && isStep3Active)
                             ? "bg-white text-black"
                             : "bg-[#262626] text-[#9ca3af]"
                         }`}
                       >
                         {s}
                       </div>
-                      {s < 4 && (
+                      {s < 3 && (
                         <div
-                          className={`w-12 h-0.5 ${
-                            step > s || (s === 2 && isPrefill && prefillDietitianId)
+                          className={`w-4 sm:w-8 md:w-12 h-0.5 ${
+                            (s === 1 && isStep2Active) || 
+                            (s === 2 && isStep3Active)
                               ? "bg-white"
                               : "bg-[#262626]"
                           }`}
@@ -1142,10 +1184,10 @@ function BookACallPageContent() {
 
           {/* Step Content - Center Aligned */}
           {step === 1 && (
-            <div className="flex justify-center p-8">
-              <div className="w-full max-w-5xl grid grid-cols-2 divide-x divide-[#262626]">
+            <div className="flex justify-center p-4 md:p-8">
+              <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#262626]">
                 {/* Left Pane - Service Information */}
-                <div className="p-8 space-y-6">
+                <div className="p-4 md:p-8 space-y-6">
                   {/* Logo and Brand */}
                   <div className="flex items-center gap-2 mb-4">
                     <Image
@@ -1159,25 +1201,25 @@ function BookACallPageContent() {
 
               {/* Service Title and Description */}
               <div>
-                <div className="flex items-start gap-2 mb-4 relative">
-                  <h2 className="text-2xl font-semibold text-[#f9fafb] leading-tight">
+                <div className="flex items-center gap-2 mb-4 relative">
+                  <h2 className="text-2xl font-semibold text-[#f9fafb] leading-tight flex-1 truncate">
                     {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.title || availableEventTypes[0]?.title || "1-on-1 Consultation with Licensed Dietician"}
                 </h2>
                   
                   {/* Event Type Selection Dropdown Icon */}
                   {availableEventTypes.length > 0 && (
-                    <div className="relative event-type-dropdown flex items-center pt-1">
+                    <div className="relative event-type-dropdown flex-shrink-0">
                       <button
                         type="button"
                         onClick={() => setIsEventTypeDropdownOpen(!isEventTypeDropdownOpen)}
-                        className="text-[#f9fafb] hover:text-[#d4d4d4] transition-colors"
+                        className="w-8 h-8 rounded-full bg-[#FFF4E0] flex items-center justify-center hover:bg-[#ffe9c2] transition-colors"
                       >
-                        <ChevronDown className={`h-5 w-5 transition-transform ${isEventTypeDropdownOpen ? "rotate-180" : ""}`} />
+                        <ChevronDown className={`h-4 w-4 text-black transition-transform ${isEventTypeDropdownOpen ? "rotate-180" : ""}`} />
                       </button>
                       
                       {/* Dropdown Menu */}
                       {isEventTypeDropdownOpen && (
-                        <div className="absolute top-full left-0 mt-2 bg-[#171717] border border-[#262626] rounded-lg shadow-xl z-50 min-w-[300px]">
+                        <div className="absolute top-full right-0 mt-2 bg-[#171717] border border-[#262626] rounded-lg shadow-xl z-50 min-w-[300px] max-w-[90vw] max-h-[50vh] overflow-y-auto">
                           {availableEventTypes.map((et) => {
                             const isSelected = selectedEventTypeId === et.id;
                             return (
@@ -1195,7 +1237,7 @@ function BookACallPageContent() {
                                     : "text-[#f9fafb] hover:bg-[#262626]"
                                 }`}
                               >
-                                <div className="font-medium">{et.title}</div>
+                                <div className="font-medium truncate">{et.title}</div>
                                 <div className="text-xs text-[#9ca3af] mt-1">
                                   {et.length}m • ₦{et.price.toLocaleString()}
                                 </div>
@@ -1215,26 +1257,28 @@ function BookACallPageContent() {
 
               {/* Service Details */}
               <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-[#9ca3af]" />
-                  <span className="text-sm text-[#f9fafb]">
-                    {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.length || availableEventTypes[0]?.length || 45}m
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Video className="h-5 w-5 text-[#9ca3af]" />
-                  <span className="text-sm text-[#f9fafb]">Google Meet</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CalendarIcon className="h-5 w-5 text-[#9ca3af]" />
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-[#f9fafb]">Africa/Lagos</span>
-                    <ChevronRight className="h-4 w-4 text-[#9ca3af]" />
+                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-[#9ca3af]" />
+                    <span className="text-xs sm:text-sm text-[#f9fafb]">
+                      {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.length || availableEventTypes[0]?.length || 45}m
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Video className="h-4 w-4 sm:h-5 sm:w-5 text-[#9ca3af]" />
+                    <span className="text-xs sm:text-sm text-[#f9fafb]">Google Meet</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CalendarIcon className="h-4 w-4 sm:h-5 sm:w-5 text-[#9ca3af]" />
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <span className="text-xs sm:text-sm text-[#f9fafb]">Africa/Lagos</span>
+                      <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4 text-[#9ca3af]" />
+                    </div>
                   </div>
                 </div>
                 {(selectedEventTypeId || availableEventTypes.length > 0) && (
-                  <div className="bg-white rounded-lg px-6 py-4 mt-3 w-fit">
-                    <span className="text-2xl font-semibold text-black">
+                  <div className="bg-white rounded-lg px-2 py-1 sm:px-3 sm:py-1.5 mt-3 w-fit">
+                    <span className="text-base sm:text-lg font-semibold text-black">
                       {eventTypePrice === 0 ? "Free" : `₦${eventTypePrice.toLocaleString()}`}
                     </span>
                   </div>
@@ -1243,7 +1287,7 @@ function BookACallPageContent() {
                 </div>
 
                 {/* Middle Pane - Enter Information */}
-                <div className="p-8">
+                <div className="p-4 md:p-8">
                   <div>
                     <h2 className="text-lg font-semibold text-[#f9fafb] mb-6">Enter your information</h2>
                     <div className="space-y-4">
@@ -1321,14 +1365,14 @@ function BookACallPageContent() {
                         // Skip to step 3 if dietitian is already pre-selected
                         <Button
                           onClick={() => setStep(3)}
-                          className="bg-white hover:bg-gray-100 text-black px-6 py-2"
+                          className="bg-[#FFF4E0] hover:bg-[#ffe9c2] text-black px-6 py-2"
                         >
                           Continue
                         </Button>
                       ) : (
                         <Button
                           onClick={() => setStep(2)}
-                          className="bg-white hover:bg-gray-100 text-black px-6 py-2"
+                          className="bg-[#FFF4E0] hover:bg-[#ffe9c2] text-black px-6 py-2"
                         >
                           Continue
                         </Button>
@@ -1342,10 +1386,10 @@ function BookACallPageContent() {
 
           {/* Step 2 - Two Columns - Skip if pre-filled from consultation request */}
           {step === 2 && !(isPrefill && prefillDietitianId) && (
-            <div className="flex justify-center p-8">
-              <div className="w-full max-w-5xl grid grid-cols-2 divide-x divide-[#262626]">
+            <div className="flex justify-center p-4 md:p-8">
+              <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#262626]">
                 {/* Left Pane - Service Information */}
-                <div className="p-8 space-y-6">
+                <div className="p-4 md:p-8 space-y-6">
                   {/* Logo and Brand */}
                   <div className="flex items-center gap-2 mb-4">
                     <Image
@@ -1359,7 +1403,7 @@ function BookACallPageContent() {
 
                   {/* Service Title and Description */}
                   <div>
-                    <h2 className="text-2xl font-semibold text-[#f9fafb] mb-4">
+                    <h2 className="text-2xl font-semibold text-[#f9fafb] mb-4 line-clamp-2">
                       {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.title || availableEventTypes[0]?.title || "1-on-1 Consultation with Licensed Dietician"}
                     </h2>
                     <p className="text-sm text-[#9ca3af] leading-relaxed mb-6">
@@ -1386,18 +1430,11 @@ function BookACallPageContent() {
                         <ChevronRight className="h-4 w-4 text-[#9ca3af]" />
                       </div>
                     </div>
-                    {(selectedEventTypeId || availableEventTypes.length > 0) && (
-                      <div className="bg-white rounded-lg px-6 py-4 mt-3 w-fit">
-                        <span className="text-2xl font-semibold text-black">
-                          {eventTypePrice === 0 ? "Free" : `₦${eventTypePrice.toLocaleString()}`}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </div>
 
                 {/* Middle Pane - Select Dietician */}
-                <div className="p-8">
+                <div className="p-4 md:p-8">
                   <div>
                     <h2 className="text-lg font-semibold text-[#f9fafb] mb-6">Select Dietician</h2>
                     {loadingDietitians ? (
@@ -1508,110 +1545,12 @@ function BookACallPageContent() {
             </div>
           )}
 
-          {/* Step 3 - Three Columns */}
+          {/* Step 3 - Date Selection Only */}
           {step === 3 && (
-            <div className="flex justify-center p-8">
-              <div className="w-full max-w-7xl grid grid-cols-3 divide-x divide-[#262626]">
-                {/* Left Pane - Service Information */}
-                <div className="p-8 space-y-6">
-                  {/* Logo and Brand */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <Image
-                      src="/daiyet logo.svg"
-                      alt="Daiyet"
-                      width={100}
-                      height={30}
-                      className="h-6 w-auto"
-                    />
-                  </div>
-
-                  {/* Service Title and Description */}
-                  <div>
-                    <h2 className="text-2xl font-semibold text-[#f9fafb] mb-4">
-                      {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.title || availableEventTypes[0]?.title || "1-on-1 Consultation with Licensed Dietician"}
-                    </h2>
-                    <p className="text-sm text-[#9ca3af] leading-relaxed mb-6">
-                      {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.description || availableEventTypes[0]?.description || "Have one on one consultation with Licensed Dietitician [Nutritional counseling and treatment plan]"}
-                    </p>
-                  </div>
-
-                  {/* Service Details */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <Clock className="h-5 w-5 text-[#9ca3af]" />
-                      <span className="text-sm text-[#f9fafb]">
-                        {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.length || availableEventTypes[0]?.length || 45}m
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Video className="h-5 w-5 text-[#9ca3af]" />
-                      <span className="text-sm text-[#f9fafb]">Google Meet</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <CalendarIcon className="h-5 w-5 text-[#9ca3af]" />
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-[#f9fafb]">Africa/Lagos</span>
-                        <ChevronRight className="h-4 w-4 text-[#9ca3af]" />
-                      </div>
-                    </div>
-                    {(selectedEventTypeId || availableEventTypes.length > 0) && (
-                      <div className="bg-white rounded-lg px-6 py-4 mt-3 w-fit">
-                        <span className="text-2xl font-semibold text-black">
-                          {eventTypePrice === 0 ? "Free" : `₦${eventTypePrice.toLocaleString()}`}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex gap-3 mt-6">
-                    {isPrefill && prefillDietitianId ? (
-                      // If pre-filled, back goes to step 1 (info), not step 2
-                      <Button
-                        onClick={() => setStep(1)}
-                        variant="outline"
-                        className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-6 py-2"
-                      >
-                        Back
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={() => setStep(2)}
-                        variant="outline"
-                        className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-6 py-2"
-                      >
-                        Back
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Middle Pane - Event Type Selection & Calendar */}
-                <div className="p-8">
-                  {/* Event Type Selection (if multiple available) */}
-                  {eventTypes.length > 1 && (
-                    <div className="mb-6">
-                      <label className="block text-sm font-medium text-[#D4D4D4] mb-2">
-                        Select Event Type
-                      </label>
-                      <select
-                        value={selectedEventTypeId}
-                        onChange={(e) => {
-                          setSelectedEventTypeId(e.target.value);
-                          const eventType = eventTypes.find(et => et.id === e.target.value);
-                          if (eventType) {
-                            setEventTypePrice(eventType.price);
-                          }
-                        }}
-                        className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] text-sm rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
-                      >
-                        {eventTypes.map((et) => (
-                          <option key={et.id} value={et.id}>
-                            {et.title} ({et.length}m) - ₦{et.price.toLocaleString()}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  
+            <div className="flex justify-center p-4 md:p-8">
+              <div className="w-full max-w-md mx-auto">
+                {/* Calendar */}
+                <div className="p-4 md:p-8">
                   <div>
                     <div className="flex items-center justify-between mb-4">
                     <button
@@ -1671,7 +1610,7 @@ function BookACallPageContent() {
                   <div className="mt-4 text-center">
                     <span className="text-xs text-[#9ca3af]">Cal.com</span>
                   </div>
-                    <div className="flex gap-3 mt-6">
+                    <div className="flex flex-col sm:flex-row gap-3 mt-6">
                       <Button
                         onClick={() => {
                           if (isPrefill && prefillDietitianId) {
@@ -1682,79 +1621,107 @@ function BookACallPageContent() {
                           }
                         }}
                         variant="outline"
-                        className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-6 py-2"
+                        className="w-full sm:w-auto bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-6 py-2"
                       >
                         Back
                       </Button>
                       <Button
                         onClick={() => setStep(4)}
-                        disabled={!selectedDate || !selectedTime}
-                        className="bg-white hover:bg-gray-100 text-black px-6 py-2 disabled:opacity-50"
+                        disabled={!selectedDate}
+                        className="w-full sm:w-auto bg-white hover:bg-gray-100 text-black px-6 py-2 disabled:opacity-50"
                       >
                         Continue
                       </Button>
                     </div>
                   </div>
                 </div>
-
-                {/* Right Pane - Time Slots */}
-                {selectedDate && (
-                  <div className="p-8">
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-medium text-[#f9fafb]">
-                          {dayjs(selectedDate).format("ddd D")}
-                        </h3>
-                        <div className="flex gap-2">
-                          <button className="text-xs px-2 py-1 bg-white text-black rounded">
-                            12h
-                          </button>
-                          <button className="text-xs px-2 py-1 bg-transparent text-[#9ca3af] rounded">
-                            24h
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                        {loadingTimeSlots ? (
-                          <div className="text-center py-8 text-sm text-[#9ca3af]">
-                            Loading available times...
-                          </div>
-                        ) : timeSlots.length === 0 ? (
-                          <div className="text-center py-8 text-sm text-[#9ca3af]">
-                            No available times for this date
-                          </div>
-                        ) : (
-                          timeSlots.map((time) => {
-                          const isSelected = selectedTime === time;
-                          return (
-                            <button
-                              key={time}
-                              onClick={() => handleTimeSelect(time)}
-                              className={`w-full h-10 rounded text-xs flex items-center gap-2 px-3 transition-colors ${
-                                isSelected
-                                  ? "bg-white text-black font-medium"
-                                  : "bg-transparent border border-[#262626] text-[#f9fafb] hover:bg-[#171717]"
-                              }`}
-                            >
-                              <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                              {formatTime(time)}
-                            </button>
-                          );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
 
-          {/* Step 4 - One Column */}
+          {/* Step 4 - Time Selection */}
           {step === 4 && (
-            <div className="flex justify-center p-8">
+            <div className="flex justify-center p-4 md:p-8">
+              <div className="w-full max-w-md mx-auto">
+                <div className="p-4 md:p-8">
+                  {/* Selected Date Display */}
+                  <div className="mb-6">
+                    <h2 className="text-lg font-semibold text-[#f9fafb] mb-2">Select Time</h2>
+                    {selectedDate && (
+                      <p className="text-sm text-[#9ca3af]">
+                        {dayjs(selectedDate).format("dddd, MMMM D, YYYY")}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Time Format Toggle */}
+                  <div className="flex items-center justify-end gap-2 mb-4">
+                    <button className="text-xs px-3 py-1.5 bg-white text-black rounded font-medium">
+                      12h
+                    </button>
+                    <button className="text-xs px-3 py-1.5 bg-transparent text-[#9ca3af] rounded border border-[#262626]">
+                      24h
+                    </button>
+                  </div>
+
+                  {/* Time Slots List */}
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto mb-6">
+                    {loadingTimeSlots ? (
+                      <div className="text-center py-8 text-sm text-[#9ca3af]">
+                        Loading available times...
+                      </div>
+                    ) : timeSlots.length === 0 ? (
+                      <div className="text-center py-8 text-sm text-[#9ca3af]">
+                        No available times for this date
+                      </div>
+                    ) : (
+                      timeSlots.map((time) => {
+                        const isSelected = selectedTime === time;
+                        return (
+                          <button
+                            key={time}
+                            onClick={() => handleTimeSelect(time)}
+                            className={`w-full h-12 rounded text-sm flex items-center gap-2 px-4 transition-colors ${
+                              isSelected
+                                ? "bg-white text-black font-medium"
+                                : "bg-transparent border border-[#262626] text-[#f9fafb] hover:bg-[#171717]"
+                            }`}
+                          >
+                            <div className={`w-2 h-2 rounded-full ${isSelected ? "bg-black" : "bg-green-500"}`} />
+                            {formatTime(time)}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Navigation Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      onClick={() => setStep(3)}
+                      variant="outline"
+                      className="w-full sm:w-auto bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-6 py-2"
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      onClick={() => setStep(5)}
+                      disabled={!selectedTime}
+                      className="w-full sm:w-auto bg-white hover:bg-gray-100 text-black px-6 py-2 disabled:opacity-50"
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5 - Order Summary */}
+          {step === 5 && (
+            <div className="flex justify-center p-4 md:p-8">
               <div className="w-full max-w-2xl">
-                <div className="p-8">
+                <div className="p-4 md:p-8">
                   <h2 className="text-lg font-semibold text-[#f9fafb] mb-6">Order Summary</h2>
                   <div className="border border-[#262626] rounded-lg p-6 space-y-3 mb-6">
                     <div className="flex justify-between text-sm">
@@ -1773,9 +1740,9 @@ function BookACallPageContent() {
                       <span className="text-[#9ca3af]">Time</span>
                       <span className="text-[#f9fafb]">{formatTime(selectedTime)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#9ca3af]">Service Type</span>
-                      <span className="text-[#f9fafb]">
+                    <div className="flex justify-between text-sm gap-2">
+                      <span className="text-[#9ca3af] flex-shrink-0">Service Type</span>
+                      <span className="text-[#f9fafb] truncate text-right">
                         {eventTypes.find(et => et.id === selectedEventTypeId)?.title || "Not selected"}
                       </span>
                     </div>
@@ -1816,17 +1783,17 @@ function BookACallPageContent() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <Button
-                      onClick={() => setStep(3)}
+                      onClick={() => setStep(4)}
                       variant="outline"
-                      className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-6 py-2"
+                      className="w-full sm:w-auto bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-6 py-2"
                     >
                       Back
                     </Button>
                     <Button
                       onClick={handleCheckoutClick}
-                      className="bg-white hover:bg-gray-100 text-black px-6 py-2"
+                      className="w-full sm:w-auto bg-white hover:bg-gray-100 text-black px-6 py-2"
                     >
                       {isReschedule ? "Confirm Reschedule" : "Proceed to Payment"}
                     </Button>
@@ -1836,8 +1803,8 @@ function BookACallPageContent() {
             </div>
           )}
 
-          {/* Success Screen */}
-          {step === 5 && bookingDetails && (
+          {/* Step 7 - Success Screen */}
+          {step === 7 && bookingDetails && (
             <div className="p-8 text-center">
               <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Check className="h-8 w-8 text-white" />
@@ -1939,7 +1906,10 @@ function BookACallPageContent() {
       {!isReschedule && (
         <PaymentModal
           isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            setStep(5);
+          }}
           onSuccess={handlePaymentSuccess}
           amount={eventTypePrice}
           currency="NGN"
@@ -2039,7 +2009,9 @@ function BookACallPageContent() {
       )}
       
       {/* Bottom Navigation - Mobile only */}
-      <UserBottomNavigation />
+      <div className="lg:hidden">
+        <UserBottomNavigation />
+      </div>
     </div>
   );
 }

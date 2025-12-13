@@ -46,22 +46,19 @@ export default function BookingsPageClient({
   const paginatedBookings = bookings.slice(startIndex, endIndex);
   const totalPages = Math.ceil(totalBookings / rowsPerPage);
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
-      {/* Mobile Header */}
-      <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col lg:flex-row">
+      {/* Mobile Header - Only on mobile */}
+      <div className="lg:hidden">
+        <MobileHeader />
+      </div>
       
-      {/* Sidebar - Hidden on mobile, opens from menu */}
-      <DashboardSidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)} 
-      />
+      {/* Sidebar - Hidden on mobile, always visible on desktop */}
+      <DashboardSidebar />
       
       {/* Main Content */}
-      <main className="flex-1 bg-[#101010] overflow-y-auto lg:ml-64 rounded-tl-lg pb-16 lg:pb-0 w-full">
-        <div className="p-4 lg:p-8 pt-14 lg:pt-8">
+      <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:w-auto lg:ml-64 lg:rounded-tl-lg pb-16 lg:pb-0">
+        <div className="p-6 lg:p-8 pt-14 lg:pt-8">
           {/* Header Section */}
           <div className="mb-6">
             <h1 className="text-[15px] font-semibold text-[#f9fafb] mb-1">
@@ -159,7 +156,9 @@ export default function BookingsPageClient({
       </main>
       
       {/* Bottom Navigation - Mobile only */}
-      <BottomNavigation />
+      <div className="lg:hidden">
+        <BottomNavigation />
+      </div>
     </div>
   );
 }

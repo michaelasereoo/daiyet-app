@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { UserDashboardSidebar } from "@/components/layout/user-dashboard-sidebar";
+import { UserMobileHeader } from "@/components/layout/mobile-header";
+import { UserBottomNavigation } from "@/components/layout/bottom-navigation";
 import { Button } from "@/components/ui/button";
 import { FileText, Eye, Download, ShoppingCart, Clock } from "lucide-react";
 import { PurchaseMealPlanModal } from "@/components/meal-plan/PurchaseMealPlanModal";
@@ -134,13 +136,21 @@ export default function UserMealPlanPage() {
     }
   };
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col lg:flex-row">
+      {/* Mobile Header - Only on mobile */}
+      <div className="lg:hidden">
+        <UserMobileHeader />
+      </div>
+      
+      {/* Sidebar - Hidden on mobile, always visible on desktop */}
       <UserDashboardSidebar />
-      <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
-        <div className="p-8">
+      
+      {/* Main Content */}
+      <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:w-auto lg:ml-64 lg:rounded-tl-lg pb-16 lg:pb-0">
+        <div className="p-6 lg:p-8 pt-14 lg:pt-8">
           {/* Header Section */}
           <div className="mb-6">
-            <h1 className="text-[15px] font-semibold text-[#f9fafb] mb-1">Meal Plans</h1>
+            <h1 className="text-xl lg:text-[15px] font-semibold text-[#f9fafb] mb-1">Meal Plans</h1>
             <p className="text-[13px] text-[#9ca3af] mb-6">
               Browse available meal plan packages and view your purchased plans.
             </p>
@@ -292,6 +302,11 @@ export default function UserMealPlanPage() {
           </div>
         </div>
       </main>
+      
+      {/* Bottom Navigation - Mobile only */}
+      <div className="lg:hidden">
+        <UserBottomNavigation />
+      </div>
 
       {/* Payment Modal */}
       {selectedPackage && (

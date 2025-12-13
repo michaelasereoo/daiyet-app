@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { supabaseAdmin } from "./supabase";
+import { createAdminClientServer } from "./supabase/server";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -17,6 +17,8 @@ export function getOAuth2Client() {
 }
 
 async function getOrRefreshToken(userId: string): Promise<{ accessToken: string; refreshToken: string }> {
+  const supabaseAdmin = createAdminClientServer();
+  
   // Get stored tokens from database
   const { data: tokenData, error } = await supabaseAdmin
     .from("google_oauth_tokens")
@@ -25,7 +27,7 @@ async function getOrRefreshToken(userId: string): Promise<{ accessToken: string;
     .single();
 
   if (error || !tokenData) {
-    throw new Error("Google OAuth tokens not found for user");
+    throw new Error("Google OAuth tokens not found for user. Please connect your Google Calendar in settings.");
   }
 
   const oauth2Client = getOAuth2Client();
@@ -61,6 +63,85 @@ async function getOrRefreshToken(userId: string): Promise<{ accessToken: string;
   };
 }
 
+/**
+ * Creates a minimal Google Calendar event solely to generate a Google Meet link.
+ * This function creates a minimal event (no attendees) to avoid full calendar integration
+ * and potential timezone issues with availability syncing.
+ * 
+ * @param dietitianId - The ID of the dietitian (user who owns the Google Calendar)
+ * @param eventDetails - Minimal event details (title, start/end times)
+ * @returns The Google Meet link string
+ */
+export async function createGoogleMeetLinkOnly(
+  dietitianId: string,
+  eventDetails: {
+    summary: string;
+    startTime: string; // ISO 8601
+    endTime: string; // ISO 8601
+  }
+): Promise<string> {
+  const { accessToken, refreshToken } = await getOrRefreshToken(dietitianId);
+  
+  const oauth2Client = getOAuth2Client();
+  oauth2Client.setCredentials({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+
+  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+  // Create minimal event - just enough to get a Meet link
+  const event = {
+    summary: eventDetails.summary,
+    start: {
+      dateTime: eventDetails.startTime,
+      timeZone: "Africa/Lagos",
+    },
+    end: {
+      dateTime: eventDetails.endTime,
+      timeZone: "Africa/Lagos",
+    },
+    conferenceData: {
+      createRequest: {
+        requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        conferenceSolutionKey: {
+          type: "hangoutsMeet",
+        },
+      },
+    },
+    // No attendees - minimal calendar sync
+    // No description - minimal event
+  };
+
+  try {
+    const response = await calendar.events.insert({
+      calendarId: "primary",
+      requestBody: event,
+      conferenceDataVersion: 1,
+    });
+
+    const meetLink =
+      response.data.conferenceData?.entryPoints?.find(
+        (ep) => ep.entryPointType === "video"
+      )?.uri || "";
+
+    if (!meetLink) {
+      throw new Error("Failed to create Google Meet link");
+    }
+
+    return meetLink;
+  } catch (error) {
+    console.error("Error creating Google Meet link:", error);
+    throw error;
+  }
+}
+
+/**
+ * Creates a full Google Calendar event with Google Meet link and attendees.
+ * Use this for full calendar integration. For Meet links only, use createGoogleMeetLinkOnly.
+ * 
+ * @deprecated For Meet links only, use createGoogleMeetLinkOnly to avoid calendar sync issues
+ */
 export async function createCalendarEventWithMeet(
   dietitianId: string,
   eventDetails: {

@@ -208,9 +208,9 @@ export default function AvailabilityPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col lg:flex-row">
       <DashboardSidebar />
-      <main className="flex-1 bg-[#101010] overflow-y-auto ml-64 rounded-tl-lg">
+      <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:w-auto lg:ml-64 lg:rounded-tl-lg">
         <div className="p-8">
           {/* Header Section */}
           <div className="mb-6">

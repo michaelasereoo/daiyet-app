@@ -123,6 +123,18 @@
       "namedRegex": "^/admin\\-login(?:/)?$"
     },
     {
+      "page": "/api/auth/google/authorize",
+      "regex": "^/api/auth/google/authorize(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/google/authorize(?:/)?$"
+    },
+    {
+      "page": "/api/auth/google/callback",
+      "regex": "^/api/auth/google/callback(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/google/callback(?:/)?$"
+    },
+    {
       "page": "/api/bookings",
       "regex": "^/api/bookings(?:/)?$",
       "routeKeys": {},
@@ -145,6 +157,12 @@
       "regex": "^/api/paystack/webhook(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/paystack/webhook(?:/)?$"
+    },
+    {
+      "page": "/auth/callback",
+      "regex": "^/auth/callback(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/auth/callback(?:/)?$"
     },
     {
       "page": "/bookings",

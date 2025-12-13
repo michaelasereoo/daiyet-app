@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 export default function NotificationsPage() {
   return (
-    <div className="p-8">
+    <div>
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-lg font-semibold text-[#f9fafb] mb-1">Push Notifications</h1>

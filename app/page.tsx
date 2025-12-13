@@ -20,7 +20,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-black text-white">
       {/* Nav */}
       <header className="border-b border-white/10 bg-black/30 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+        <div className="container mx-auto px-6 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
             <Image
               src="/daiyet logo.svg"
@@ -34,11 +34,11 @@ export default function HomePage() {
           <div className="flex items-center gap-2 sm:gap-4">
             <Link
               href="/login"
-              className="text-white/80 hover:text-white transition-colors text-xs sm:text-sm px-2 sm:px-0"
+              className="flex items-center text-white/80 hover:text-white transition-colors text-xs sm:text-sm px-2 sm:px-0"
             >
               Login
             </Link>
-            <Button asChild className="bg-[#FFF4E0] text-black hover:bg-[#ffe9c2] text-xs sm:text-sm h-9 sm:h-10 px-3 sm:px-4">
+            <Button asChild className="bg-[#FFF4E0] text-black hover:bg-[#ffe9c2] text-xs sm:text-sm h-8 sm:h-10 px-3 sm:px-4 py-1.5 sm:py-2">
               <Link href="/signup">Get Started</Link>
             </Button>
           </div>
@@ -47,9 +47,9 @@ export default function HomePage() {
 
       <main>
         {/* Hero */}
-        <section className="container mx-auto px-4 sm:px-6 min-h-[calc(100vh-80px)] flex items-center justify-center py-8 sm:py-16">
+        <section className="container mx-auto px-6 sm:px-6 min-h-[calc(100vh-80px)] flex items-center justify-center py-8 sm:py-16">
           <div className="w-full max-w-6xl grid lg:grid-cols-2 gap-8 sm:gap-12 items-center">
-            <div className="space-y-6 self-center">
+            <div className="space-y-6 self-center text-center lg:text-left">
               <div className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs text-white/70">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#E5FF53" }}></span>
                 Now serving patients in Nigeria
@@ -57,20 +57,20 @@ export default function HomePage() {
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold leading-tight">
                 Book dietitian consultations without the back-and-forth.
               </h1>
-              <p className="text-base sm:text-lg text-white/70 leading-relaxed max-w-2xl">
+              <p className="text-base sm:text-lg text-white/70 leading-relaxed max-w-2xl mx-auto lg:mx-0">
                 Daiyet pairs you with licensed dietitians and handles scheduling, reminders, and meal-plan delivery with a Cal.com–inspired experience.
               </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button asChild className="bg-[#FFF4E0] text-black hover:bg-[#ffe9c2] h-12 px-6">
+              <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
+                <Button asChild className="bg-[#FFF4E0] text-black hover:bg-[#ffe9c2] h-10 sm:h-12 px-6 py-2 sm:py-3">
                   <Link href="/signup">
                   Book a Call <ArrowRight className="h-4 w-4 ml-2" />
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/5 h-12 px-6">
+                <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/5 h-10 sm:h-12 px-6 py-2 sm:py-3">
                   Meet Dietitians
                 </Button>
               </div>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-white/60">
+              <div className="hidden sm:flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-2 sm:gap-4 text-xs sm:text-sm text-white/60">
                 <div className="flex items-center gap-1">
                   <span style={{ color: "#E5FF53" }}>●</span> Instant confirmations
                 </div>
@@ -81,7 +81,7 @@ export default function HomePage() {
             </div>
 
             {/* Booking Card */}
-            <div className="relative mt-8 sm:mt-16 lg:mt-14 mb-8 sm:mb-16 flex justify-center self-center w-full">
+            <div className="hidden sm:flex relative mt-8 sm:mt-16 lg:mt-14 mb-8 sm:mb-16 justify-center self-center w-full">
               <Card className="relative z-10 bg-[#FFF4E0] border border-[#f1e2c0] shadow-xl w-full max-w-[520px]">
                 <CardContent className="p-4 sm:p-6">
                 <h3 className="text-sm font-semibold text-[#374151] mb-1">Dt. Odeyemi Makinde</h3>
@@ -170,7 +170,7 @@ export default function HomePage() {
       </main>
 
       <footer className="border-t border-white/10 bg-black/40">
-        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4 text-xs sm:text-sm text-white/70">
+        <div className="container mx-auto px-6 sm:px-6 py-4 sm:py-6 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4 text-xs sm:text-sm text-white/70">
           <span>© {new Date().getFullYear()} Daiyet. All rights reserved.</span>
           <div className="flex gap-4">
             <Link href="/terms-of-service" className="hover:text-white transition-colors">

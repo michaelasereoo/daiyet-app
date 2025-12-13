@@ -57,7 +57,19 @@ export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard", 
   };
 
   return (
-    <div className="relative min-h-screen bg-[#0b0b0b] text-white overflow-hidden flex items-center justify-center px-4 sm:px-6 md:px-8 py-10 md:py-14">
+    <div className="relative min-h-screen bg-[#0b0b0b] text-white overflow-hidden flex flex-col px-4 sm:px-6 md:px-8">
+      {/* Back Button - Top Header Position */}
+      <div className="sticky top-0 z-50 bg-[#0b0b0b]/80 backdrop-blur-sm border-b border-white/10">
+        <div className="container mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-white/90 hover:text-white transition-colors text-base sm:text-lg font-medium"
+          >
+            <span className="text-2xl sm:text-3xl leading-none">←</span> Back
+          </Link>
+        </div>
+      </div>
+
       {/* Faint grid background */}
       <div
         className="pointer-events-none absolute inset-0"
@@ -73,16 +85,7 @@ export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard", 
         }}
       />
 
-      <div className="relative z-10 w-full max-w-4xl text-center space-y-8 md:space-y-10 py-10 md:py-12">
-        <div className="flex items-center justify-between text-xs sm:text-sm text-white/70 mb-2">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-white/70 hover:text-white transition-colors"
-          >
-            <span className="text-lg leading-none">←</span> Back
-          </Link>
-          <span className="hidden sm:block" />
-        </div>
+      <div className="relative z-10 w-full max-w-4xl mx-auto text-center space-y-8 md:space-y-10 py-10 md:py-14 flex-1 flex flex-col items-center justify-center">
 
         <div className="flex items-center justify-center gap-3 text-sm text-white/70">
           <Image

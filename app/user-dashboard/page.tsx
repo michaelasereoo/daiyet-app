@@ -9,7 +9,9 @@ import { BookingsList } from "@/components/bookings/BookingsList";
 import { SessionRequestCard } from "@/components/user/session-request-card";
 import { PaymentModal } from "@/components/user/payment-modal";
 import { PaymentSuccessModal } from "@/components/user/payment-success-modal";
+import { Button } from "@/components/ui/button";
 import { Mail } from "lucide-react";
+import Link from "next/link";
 import { useBookingsStream } from "@/hooks/useBookingsStream";
 import dayjs from "dayjs";
 
@@ -250,25 +252,22 @@ export default function UserDashboardPage() {
     }
   };
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
-      {/* Mobile Header */}
-      <UserMobileHeader onMenuClick={() => setSidebarOpen(true)} />
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col lg:flex-row">
+      {/* Mobile Header - Only on mobile */}
+      <div className="lg:hidden">
+        <UserMobileHeader />
+      </div>
       
-      {/* Sidebar - Hidden on mobile, opens from menu */}
-      <UserDashboardSidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)} 
-      />
+      {/* Sidebar - Hidden on mobile, always visible on desktop */}
+      <UserDashboardSidebar />
       
       {/* Main Content */}
-      <main className="flex-1 bg-[#101010] overflow-y-auto lg:ml-64 rounded-tl-lg pb-16 lg:pb-0 w-full">
-        <div className="p-4 lg:p-8 pt-14 lg:pt-8">
+      <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:w-auto lg:ml-64 lg:rounded-tl-lg pb-16 lg:pb-0">
+        <div className="p-6 lg:p-8 pt-6 lg:pt-8">
           {/* Header Section */}
           <div className="mb-6">
-            <h1 className="text-[15px] font-semibold text-[#f9fafb] mb-1">
+            <h1 className="text-xl lg:text-[15px] font-semibold text-[#f9fafb] mb-1">
               {userName ? `Welcome back, ${userName}!` : "Dashboard"}
             </h1>
             <p className="text-[13px] text-[#9ca3af] mb-6">
@@ -276,24 +275,33 @@ export default function UserDashboardPage() {
             </p>
           </div>
 
+          {/* Book a Call Button */}
+          <div className="mb-6">
+            <Link href="/user-dashboard/book-a-call">
+              <Button className="w-full sm:w-auto bg-[#FFF4E0] hover:bg-[#ffe9c2] text-black px-6 py-3 text-sm font-medium">
+                Book a Call
+              </Button>
+            </Link>
+          </div>
+
           {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {/* Total Sessions Card */}
-            <div className="border border-[#262626] rounded-lg px-6 py-4 bg-transparent">
-              <div className="text-sm text-[#9ca3af] mb-2">Total Sessions</div>
-              <div className="text-2xl font-semibold text-[#f9fafb]">{totalSessions.toLocaleString()}</div>
+            <div className="border border-[#262626] rounded-lg px-4 lg:px-6 py-3 lg:py-4 bg-transparent flex items-center justify-between">
+              <div className="text-xs lg:text-sm text-[#9ca3af]">Total Sessions</div>
+              <div className="text-xl lg:text-2xl font-semibold text-[#f9fafb]">{totalSessions.toLocaleString()}</div>
             </div>
 
             {/* Upcoming Meetings Card */}
-            <div className="border border-[#262626] rounded-lg px-6 py-4 bg-transparent">
-              <div className="text-sm text-[#9ca3af] mb-2">Upcoming Meetings</div>
-              <div className="text-2xl font-semibold text-[#f9fafb]">{upcomingMeetings.toLocaleString()}</div>
+            <div className="border border-[#262626] rounded-lg px-4 lg:px-6 py-3 lg:py-4 bg-transparent flex items-center justify-between">
+              <div className="text-xs lg:text-sm text-[#9ca3af]">Upcoming Meetings</div>
+              <div className="text-xl lg:text-2xl font-semibold text-[#f9fafb]">{upcomingMeetings.toLocaleString()}</div>
             </div>
 
             {/* Meal Plans Purchased Card */}
-            <div className="border border-[#262626] rounded-lg px-6 py-4 bg-transparent">
-              <div className="text-sm text-[#9ca3af] mb-2">Meal Plans Purchased</div>
-              <div className="text-2xl font-semibold text-[#f9fafb]">{mealPlansCount.toLocaleString()}</div>
+            <div className="border border-[#262626] rounded-lg px-4 lg:px-6 py-3 lg:py-4 bg-transparent flex items-center justify-between">
+              <div className="text-xs lg:text-sm text-[#9ca3af]">Meal Plans Purchased</div>
+              <div className="text-xl lg:text-2xl font-semibold text-[#f9fafb]">{mealPlansCount.toLocaleString()}</div>
             </div>
           </div>
 
@@ -394,7 +402,9 @@ export default function UserDashboardPage() {
       )}
       
       {/* Bottom Navigation - Mobile only */}
-      <UserBottomNavigation />
+      <div className="lg:hidden">
+        <UserBottomNavigation />
+      </div>
     </div>
   );
 }
