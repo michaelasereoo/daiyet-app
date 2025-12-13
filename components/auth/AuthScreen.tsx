@@ -25,7 +25,8 @@ export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard", 
     try {
       const supabase = createComponentClient();
 
-      // Use NEXT_PUBLIC_SITE_URL if available (for production), otherwise use window.location.origin
+      // Always prefer NEXT_PUBLIC_SITE_URL if set (for production), otherwise use window.location.origin
+      // This ensures production always uses the correct URL even if accessed via different domains
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
       
       // FIXED: Let Supabase handle state - don't use custom state
@@ -33,6 +34,11 @@ export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard", 
       const callbackUrl = source 
         ? `${siteUrl}/auth/callback?source=${encodeURIComponent(source)}`
         : `${siteUrl}/auth/callback`;
+      
+      // Log for debugging
+      console.log('🔐 OAuth redirect URL:', callbackUrl);
+      console.log('🌐 Site URL:', siteUrl);
+      console.log('🏭 Is Production:', isProduction);
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
