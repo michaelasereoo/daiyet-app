@@ -38,7 +38,6 @@ export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard", 
       // Log for debugging
       console.log('🔐 OAuth redirect URL:', callbackUrl);
       console.log('🌐 Site URL:', siteUrl);
-      console.log('🏭 Is Production:', isProduction);
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
