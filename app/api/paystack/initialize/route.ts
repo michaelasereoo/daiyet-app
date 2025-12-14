@@ -1,11 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+// Create admin client directly for database operations
+function getAdminClient() {
+  if (!supabaseServiceKey) {
+    console.error("[Paystack] SUPABASE_SERVICE_ROLE_KEY not configured");
+    return null;
+  }
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -119,17 +134,22 @@ export async function POST(request: NextRequest) {
 
     const { authorization_url, reference } = initJson.data;
 
-    // Upsert payment record as pending
-    await supabaseAdmin.from("payments").upsert(
-      {
-        paystack_ref: reference,
-        booking_id: bookingId,
-        amount,
-        currency: "NGN",
-        status: "PENDING",
-      },
-      { onConflict: "paystack_ref" }
-    );
+    // Upsert payment record as pending (using admin client for RLS bypass)
+    const adminClient = getAdminClient();
+    if (adminClient) {
+      await adminClient.from("payments").upsert(
+        {
+          paystack_ref: reference,
+          booking_id: bookingId,
+          amount,
+          currency: "NGN",
+          status: "PENDING",
+        },
+        { onConflict: "paystack_ref" }
+      );
+    } else {
+      console.warn("[Paystack] No admin client available, skipping payment record");
+    }
 
     return NextResponse.json({ authorization_url, reference });
   } catch (error: any) {

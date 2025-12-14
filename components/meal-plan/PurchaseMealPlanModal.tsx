@@ -158,7 +158,7 @@ export function PurchaseMealPlanModal({
           </Button>
           <Button
             onClick={handleCheckout}
-            disabled={!selectedDietician || !selectedPackage}
+            disabled={!selectedDietitian || !selectedPackage}
             className="bg-white hover:bg-gray-100 text-black px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Go to Checkout
