@@ -137,13 +137,13 @@ export default function ProfilePage() {
       if (result.data) {
         const updatedProfile = { 
           ...profile, 
-          name: result.data.name,
+          name: newName,
           updatedAt: result.data.updated_at 
         };
         setProfile(updatedProfile);
         
         // Update AuthProvider context so name reflects throughout the app (sidebar, etc.)
-        setProfileDirect({ name: result.data.name, image: profile.image || null });
+        setProfileDirect({ name: newName, image: profile.image || null });
       }
       
       setSaveSuccess(true);

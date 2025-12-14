@@ -36,15 +36,15 @@ function getDevUser(request: Request | NextRequest): User | null {
     let url: URL;
     if (request instanceof Request) {
       url = new URL(request.url);
-    } else {
-      // NextRequest has nextUrl property
-      const nextUrl = (request as any).nextUrl;
-      if (nextUrl) {
-        url = nextUrl;
       } else {
-        url = new URL((request as any).url || request.url || 'http://localhost:3000');
+        // NextRequest has nextUrl property
+        const nextUrl = (request as any).nextUrl;
+        if (nextUrl) {
+          url = nextUrl;
+        } else {
+          url = new URL((request as any).url || 'http://localhost:3000');
+        }
       }
-    }
     
     const pathname = url.pathname;
     
