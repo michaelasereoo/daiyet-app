@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { X, CreditCard, Loader2 } from "lucide-react";
+import { getEmailFromSession, isValidEmail } from "@/lib/email-utils";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -51,12 +52,95 @@ export function PaymentModal({
   userName,
 }: PaymentModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoadingUserData, setIsLoadingUserData] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [finalEmail, setFinalEmail] = useState<string | null>(null);
+  const [finalName, setFinalName] = useState<string | null>(null);
+
+  // Fetch email and name from session - ALWAYS prioritize session email for reliability
+  useEffect(() => {
+    const ensureUserData = async () => {
+      setIsLoadingUserData(true);
+      
+      try {
+        const { createBrowserClient } = await import("@/lib/supabase/client");
+        const supabase = createBrowserClient();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !session?.user) {
+          // If session fetch fails but we have props, use props
+          if (isValidEmail(userEmail)) {
+            setFinalEmail(userEmail!);
+            setFinalName(userName || "User");
+            setError(null);
+            setIsLoadingUserData(false);
+            return;
+          }
+          setError("Please ensure you are logged in to complete payment.");
+          setIsLoadingUserData(false);
+          return;
+        }
+
+        const sessionUser = session.user;
+        const sessionEmail = sessionUser.email;
+
+        // PRIORITY: session email (most reliable for Google OAuth) > props > error
+        // Session email should ALWAYS be available for authenticated Google users
+        if (isValidEmail(sessionEmail)) {
+          setFinalEmail(sessionEmail!);
+        } else if (isValidEmail(userEmail)) {
+          // Fallback to props if session email somehow unavailable
+          setFinalEmail(userEmail!);
+        } else {
+          setError("Email is required for payment. Please ensure you are logged in.");
+          setIsLoadingUserData(false);
+          return;
+        }
+
+        // Get name - priority: props > Google auth metadata > session email prefix
+        const resolvedName = 
+          userName ||
+          sessionUser.user_metadata?.name ||
+          sessionUser.user_metadata?.full_name ||
+          sessionUser.email?.split("@")[0] ||
+          "User";
+        
+        setFinalName(resolvedName);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching user data from session:", err);
+        // Last resort: use props if available
+        if (isValidEmail(userEmail)) {
+          setFinalEmail(userEmail!);
+          setFinalName(userName || "User");
+          setError(null);
+        } else {
+          setError("Unable to retrieve user information. Please ensure you are logged in.");
+        }
+      } finally {
+        setIsLoadingUserData(false);
+      }
+    };
+
+    if (isOpen) {
+      ensureUserData();
+    }
+  }, [isOpen, userEmail, userName]);
 
   const handlePayment = async () => {
-    if (!userEmail) {
-      setError("User email is required for payment");
+    // Use finalEmail and finalName (which may have been fetched from session)
+    let emailToUse = finalEmail || userEmail;
+    let nameToUse = finalName || userName;
+
+    // Final validation - ensure we have email
+    if (!isValidEmail(emailToUse)) {
+      setError("User email is required for payment. Please ensure you are logged in.");
       return;
+    }
+
+    // Fallback name to email if no name available
+    if (!nameToUse || nameToUse.trim().length === 0) {
+      nameToUse = emailToUse.split("@")[0] || "User";
     }
 
     try {
@@ -70,9 +154,9 @@ export function PaymentModal({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: userEmail,
+          email: emailToUse,
           amount: amount * 100, // Paystack expects amount in kobo
-          name: userName || userEmail,
+          name: nameToUse,
           bookingId: bookingId || requestId || undefined, // Use bookingId if available
           metadata: {
             requestId: requestId || "",
@@ -138,6 +222,18 @@ export function PaymentModal({
               <div className="flex justify-between text-sm">
                 <span className="text-[#9ca3af]">{description}</span>
               </div>
+              <div className="flex justify-between text-sm pt-2">
+                <span className="text-[#9ca3af]">Name</span>
+                <span className="text-[#f9fafb]">
+                  {isLoadingUserData ? "Loading..." : (finalName || userName || "N/A")}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[#9ca3af]">Email</span>
+                <span className="text-[#f9fafb]">
+                  {isLoadingUserData ? "Loading..." : (finalEmail || userEmail || "N/A")}
+                </span>
+              </div>
               <div className="border-t border-[#262626] pt-2 mt-2">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-[#f9fafb]">Total</span>
@@ -169,13 +265,18 @@ export function PaymentModal({
             </Button>
             <Button
               onClick={handlePayment}
-              disabled={isProcessing}
+              disabled={isProcessing || isLoadingUserData || !finalEmail}
               className="bg-white hover:bg-gray-100 text-black px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Processing...
+                </>
+              ) : isLoadingUserData ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading...
                 </>
               ) : (
                 <>
