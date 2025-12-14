@@ -141,6 +141,7 @@ function BookACallPageContent() {
   // Real availability data
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
+  const [isLoadingDates, setIsLoadingDates] = useState(false);
   // Initialize availableDates from cache if available
   const [availableDates, setAvailableDates] = useState<string[]>(() => {
     // Try to load from cache on mount if dietitian is already selected
@@ -373,6 +374,7 @@ function BookACallPageContent() {
       };
 
       const fetchFreshData = async () => {
+        setIsLoadingDates(true);
         try {
           // Preload current month + next month for faster UX
           const startOfCurrentMonth = currentMonth.startOf("month").format("YYYY-MM-DD");
@@ -431,6 +433,8 @@ function BookACallPageContent() {
           }
         } catch (err) {
           console.error("❌ [PRELOAD] Error fetching available dates:", err);
+        } finally {
+          setIsLoadingDates(false);
         }
       };
 
@@ -609,29 +613,27 @@ function BookACallPageContent() {
 
   // Always fetch email from authenticated session when step 5 is reached (order summary)
   // Since user is authenticated, we should always have access to their email
+  // FORCE update all email sources to ensure payment works
   useEffect(() => {
     if (step === 5) {
-      const fetchSessionEmail = async () => {
+      const fetchAndForceSetEmail = async () => {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user?.email) {
-            console.log('📧 [DEBUG] Ensuring email from authenticated session for order summary:', session.user.email);
-            // Always set sessionEmail from authenticated user
-            setSessionEmail(session.user.email);
-            // Set userEmail if not already set
-            if (!userEmail) {
-              setUserEmail(session.user.email);
-            }
-            // Also update formData if empty
-            if (!formData.email) {
-              setFormData(prev => ({ ...prev, email: session.user.email || "" }));
-            }
+            const email = session.user.email;
+            console.log('📧 [DEBUG] Force-setting email from authenticated session for order summary:', email);
+            // FORCE update ALL email sources regardless of current values
+            setSessionEmail(email);
+            setUserEmail(email);
+            setFormData(prev => ({ ...prev, email: email }));
+          } else {
+            console.warn('⚠️ [DEBUG] No email in session for order summary');
           }
         } catch (err) {
           console.error("Error fetching session email for order summary:", err);
         }
       };
-      fetchSessionEmail();
+      fetchAndForceSetEmail();
     }
   }, [step]);
 
@@ -842,70 +844,15 @@ function BookACallPageContent() {
             }));
           }
 
-          // Fetch booking history to determine available event types
-          const historyResponse = await fetch("/api/user/booking-history", {
-            credentials: "include",
-          });
-          if (historyResponse.ok) {
-            const historyData = await historyResponse.json();
-            setBookingHistory(historyData);
-            
-            // Filter default event types based on booking history
-            const bookedSlugs = historyData.bookedEventTypes || [];
-            let filteredTypes = defaultEventTypes;
-            
-            if (bookedSlugs.includes("free-trial-consultation") || bookedSlugs.includes("free-trial")) {
-              // After free trial, only 1-on-1 available
-              filteredTypes = defaultEventTypes.filter(et => 
-                et.slug === "1-on-1-consultation-with-licensed-dietician"
-              );
-            } else if (bookedSlugs.includes("1-on-1-consultation-with-licensed-dietician") || bookedSlugs.includes("1-on-1") || bookedSlugs.includes("one-on-one")) {
-              // After 1-on-1, add monitoring
-              filteredTypes = defaultEventTypes.filter(et => 
-                et.slug === "1-on-1-consultation-with-licensed-dietician" || 
-                et.slug === "monitoring"
-              );
-            } else {
-              // Initially: only free-trial and 1-on-1
-              filteredTypes = defaultEventTypes.filter(et => 
-                et.slug === "free-trial-consultation" || 
-                et.slug === "1-on-1-consultation-with-licensed-dietician"
-              );
-            }
-            
-            // Always include test-event regardless of booking history
-            const testEvent = defaultEventTypes.find(et => et.slug === "test-event");
-            if (testEvent && !filteredTypes.find(et => et.slug === "test-event")) {
-              filteredTypes.push(testEvent);
-            }
-            
-            setEventTypes(defaultEventTypes);
-            setAvailableEventTypes(filteredTypes);
-            
-            // Auto-select first available event type
-            if (filteredTypes.length > 0 && !selectedEventTypeId) {
-              setSelectedEventTypeId(filteredTypes[0].id);
-              setEventTypePrice(filteredTypes[0].price);
-            }
-          } else {
-            // If no booking history, show free-trial and 1-on-1 by default
-            let filteredTypes = defaultEventTypes.filter(et => 
-              et.slug === "free-trial-consultation" || 
-              et.slug === "1-on-1-consultation-with-licensed-dietician"
-            );
-            
-            // Always include test-event regardless of booking history
-            const testEvent = defaultEventTypes.find(et => et.slug === "test-event");
-            if (testEvent && !filteredTypes.find(et => et.slug === "test-event")) {
-              filteredTypes.push(testEvent);
-            }
-            
-            setEventTypes(defaultEventTypes);
-            setAvailableEventTypes(filteredTypes);
-            if (filteredTypes.length > 0 && !selectedEventTypeId) {
-              setSelectedEventTypeId(filteredTypes[0].id);
-              setEventTypePrice(filteredTypes[0].price);
-            }
+          // Show all default event types to all users (no filtering based on booking history)
+          // This ensures both new and existing users see all 4 event types
+          setEventTypes(defaultEventTypes);
+          setAvailableEventTypes(defaultEventTypes);
+          
+          // Auto-select first event type if not already selected
+          if (!selectedEventTypeId) {
+            setSelectedEventTypeId(defaultEventTypes[0].id);
+            setEventTypePrice(defaultEventTypes[0].price);
           }
         }
       } catch (err) {
@@ -1065,12 +1012,41 @@ function BookACallPageContent() {
       if (selectedDate && selectedTime && selectedDietician && selectedEventTypeId) {
       // Validate email and name before proceeding
       // Priority: formData > userProfile > session data
-      const finalEmail = formData.email || userProfile?.email || sessionEmail;
-      const finalName = formData.name || userProfile?.name || sessionName;
+      let finalEmail = formData.email || userProfile?.email || sessionEmail;
+      let finalName = formData.name || userProfile?.name || sessionName;
+        
+        // Last resort: fetch email directly from session if still empty
+        if (!finalEmail) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user?.email) {
+              finalEmail = session.user.email;
+              console.log('📧 [DEBUG] Retrieved email from session as last resort:', finalEmail);
+            }
+          } catch (err) {
+            console.error("Error fetching session for email:", err);
+          }
+        }
         
         if (!finalEmail) {
-          alert("Email is required for payment. Please enter your email address.");
+          alert("Email is required for payment. Please ensure you are logged in and try again.");
           return;
+        }
+        
+        // Last resort: fetch name directly from session if still empty
+        if (!finalName) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+              finalName = session.user.user_metadata?.name || 
+                         session.user.user_metadata?.full_name || 
+                         session.user.email?.split("@")[0] || 
+                         "User";
+              console.log('👤 [DEBUG] Retrieved name from session as last resort:', finalName);
+            }
+          } catch (err) {
+            console.error("Error fetching session for name:", err);
+          }
         }
         
         if (!finalName) {
@@ -1860,6 +1836,13 @@ function BookACallPageContent() {
                       </div>
                     ))}
                   </div>
+                  {isLoadingDates ? (
+                    <div className="grid grid-cols-7 gap-1">
+                      {Array.from({ length: 35 }).map((_, idx) => (
+                        <div key={`skeleton-${idx}`} className="h-10 rounded bg-[#262626] animate-pulse" />
+                      ))}
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-7 gap-1">
                     {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
                       <div key={`empty-${idx}`} className="h-10" />
@@ -1888,6 +1871,7 @@ function BookACallPageContent() {
                       );
                     })}
                   </div>
+                  )}
                   <div className="mt-4 text-center">
                     <span className="text-xs text-[#9ca3af]">Cal.com</span>
                   </div>
@@ -1948,8 +1932,10 @@ function BookACallPageContent() {
                   {/* Time Slots List */}
                   <div className="space-y-2 max-h-[400px] overflow-y-auto mb-6">
                     {loadingTimeSlots ? (
-                      <div className="text-center py-8 text-sm text-[#9ca3af]">
-                        Loading available times...
+                      <div className="space-y-2">
+                        {Array.from({ length: 6 }).map((_, idx) => (
+                          <div key={`timeslot-skeleton-${idx}`} className="w-full h-12 rounded bg-[#262626] animate-pulse" />
+                        ))}
                       </div>
                     ) : timeSlots.length === 0 ? (
                       <div className="text-center py-8 text-sm text-[#9ca3af]">

@@ -139,11 +139,10 @@ export function BookingForm({
 
         <div className="space-y-2">
           <Label htmlFor="complaint" className="text-[#f9fafb]">
-            Complaint / Additional Notes <span className="text-red-500">*</span>
+            Additional Notes <span className="text-[#6b7280]">(Optional)</span>
           </Label>
           <Textarea
             id="complaint"
-            required
             value={formData.complaint}
             onChange={(e) => setFormData({ ...formData, complaint: e.target.value })}
             placeholder="Tell us about your concerns, goals, or any special requirements..."
