@@ -29,10 +29,20 @@ interface MealPlanPackage {
   currency: string;
 }
 
+interface SelectedPurchase {
+  packageId: string;
+  packageName: string;
+  price: number;
+  currency: string;
+  dietitianId: string;
+  dietitianName: string;
+}
+
 export default function UserMealPlanPage() {
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<{ id: string; name: string; price: number; currency: string } | null>(null);
+  const [selectedPurchase, setSelectedPurchase] = useState<SelectedPurchase | null>(null);
   const [pendingPlans, setPendingPlans] = useState<MealPlan[]>([]);
   const [sessionRequests, setSessionRequests] = useState<any[]>([]);
 
@@ -96,6 +106,7 @@ export default function UserMealPlanPage() {
   const receivedMealPlans = mealPlans.filter((mp) => mp.status === "SENT" && mp.fileUrl);
   const paidPendingMealPlans = mealPlans.filter((mp) => mp.status === "SENT" && !mp.fileUrl);
 
+  // Step 1: User clicks Purchase - opens dietitian selection modal
   const handlePurchaseClick = (pkg: typeof MEAL_PLAN_PACKAGES[0]) => {
     setSelectedPackage({
       id: pkg.id,
@@ -103,25 +114,40 @@ export default function UserMealPlanPage() {
       price: pkg.price,
       currency: pkg.currency,
     });
+    setIsPurchaseModalOpen(true);
+  };
+
+  // Step 2: User selects dietitian and clicks "Go to Checkout" - opens payment modal
+  const handleCheckout = (data: { dietitianId: string; dietitianName: string; packageName: string; packageId: string; price: number }) => {
+    setSelectedPurchase({
+      packageId: data.packageId,
+      packageName: data.packageName,
+      price: data.price,
+      currency: selectedPackage?.currency || "NGN",
+      dietitianId: data.dietitianId,
+      dietitianName: data.dietitianName,
+    });
+    setIsPurchaseModalOpen(false);
     setIsPaymentModalOpen(true);
   };
 
+  // Step 3: Payment success - create session request for the dietitian
   const handlePaymentSuccess = async (paymentData: any) => {
-    if (!selectedPackage) return;
+    if (!selectedPurchase) return;
 
     try {
-      // Create meal plan record
-      const response = await fetch("/api/meal-plans", {
+      // Create a session request for the meal plan
+      const response = await fetch("/api/user/session-requests", {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: "current-user", // Will be determined server-side
-          packageName: selectedPackage.name,
-          price: selectedPackage.price,
-          currency: selectedPackage.currency,
+          dietitianId: selectedPurchase.dietitianId,
+          requestType: "MEAL_PLAN",
+          mealPlanType: selectedPurchase.packageName,
+          notes: `Meal Plan Purchase: ${selectedPurchase.packageName}`,
           paymentData,
         }),
       });
@@ -129,10 +155,12 @@ export default function UserMealPlanPage() {
       if (response.ok) {
         setIsPaymentModalOpen(false);
         setSelectedPackage(null);
-        // Meal plan will appear via SSE stream
+        setSelectedPurchase(null);
+        // Refresh session requests to show the new pending plan
+        window.location.reload();
       }
     } catch (err) {
-      console.error("Error creating meal plan:", err);
+      console.error("Error creating meal plan request:", err);
     }
   };
   return (
@@ -308,18 +336,30 @@ export default function UserMealPlanPage() {
         <UserBottomNavigation />
       </div>
 
+      {/* Purchase Modal - Select Dietitian */}
+      <PurchaseMealPlanModal
+        isOpen={isPurchaseModalOpen}
+        onClose={() => {
+          setIsPurchaseModalOpen(false);
+          setSelectedPackage(null);
+        }}
+        selectedPackage={selectedPackage}
+        onCheckout={handleCheckout}
+      />
+
       {/* Payment Modal */}
-      {selectedPackage && (
+      {selectedPurchase && (
         <PaymentModal
           isOpen={isPaymentModalOpen}
           onClose={() => {
             setIsPaymentModalOpen(false);
+            setSelectedPurchase(null);
             setSelectedPackage(null);
           }}
           onSuccess={handlePaymentSuccess}
-          amount={selectedPackage.price}
-          currency={selectedPackage.currency}
-          description={`Meal Plan: ${selectedPackage.name}`}
+          amount={selectedPurchase.price}
+          currency={selectedPurchase.currency}
+          description={`Meal Plan: ${selectedPurchase.packageName} (from ${selectedPurchase.dietitianName})`}
           requestType="MEAL_PLAN"
           userEmail=""
           userName=""

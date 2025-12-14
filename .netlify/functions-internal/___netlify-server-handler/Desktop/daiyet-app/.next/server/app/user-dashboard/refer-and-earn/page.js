@@ -2,7 +2,7 @@ var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/user-das
 R.c("server/chunks/ssr/[root-of-the-server]__3f4e92f8._.js")
 R.c("server/chunks/ssr/Desktop_daiyet-app_7becb63d._.js")
 R.c("server/chunks/ssr/Desktop_daiyet-app_e0d6c091._.js")
-R.c("server/chunks/ssr/[root-of-the-server]__fc27acbe._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__561c5f08._.js")
 R.c("server/chunks/ssr/5f784_next_dist_023e851e._.js")
 R.c("server/chunks/ssr/5f784_next_dist_56e110c2._.js")
 R.c("server/chunks/ssr/Desktop_daiyet-app_app_7c1d9f18._.js")

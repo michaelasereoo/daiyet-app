@@ -81,7 +81,6 @@
   "/api/users/by-email/route": "app/api/users/by-email/route.js",
   "/auth/callback/route": "app/auth/callback/route.js",
   "/auth/error/page": "app/auth/error/page.js",
-  "/book/[dietitian]/page": "app/book/[dietitian]/page.js",
   "/bookings/page": "app/bookings/page.js",
   "/dashboard/availability/[id]/page": "app/dashboard/availability/[id]/page.js",
   "/dashboard/availability/overrides/page": "app/dashboard/availability/overrides/page.js",

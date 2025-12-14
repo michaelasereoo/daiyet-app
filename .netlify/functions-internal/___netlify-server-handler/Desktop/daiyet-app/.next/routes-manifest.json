@@ -144,14 +144,6 @@
       "namedRegex": "^/api/user/session\\-requests/(?<nxtPid>[^/]+?)/reject(?:/)?$"
     },
     {
-      "page": "/book/[dietitian]",
-      "regex": "^/book/([^/]+?)(?:/)?$",
-      "routeKeys": {
-        "nxtPdietitian": "nxtPdietitian"
-      },
-      "namedRegex": "^/book/(?<nxtPdietitian>[^/]+?)(?:/)?$"
-    },
-    {
       "page": "/dashboard/availability/[id]",
       "regex": "^/dashboard/availability/([^/]+?)(?:/)?$",
       "routeKeys": {

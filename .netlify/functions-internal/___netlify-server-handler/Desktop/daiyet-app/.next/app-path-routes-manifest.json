@@ -81,7 +81,6 @@
   "/api/users/by-email/route": "/api/users/by-email",
   "/auth/callback/route": "/auth/callback",
   "/auth/error/page": "/auth/error",
-  "/book/[dietitian]/page": "/book/[dietitian]",
   "/bookings/page": "/bookings",
   "/dashboard/availability/[id]/page": "/dashboard/availability/[id]",
   "/dashboard/availability/overrides/page": "/dashboard/availability/overrides",
