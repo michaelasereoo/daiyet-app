@@ -63,7 +63,19 @@ export async function POST(request: NextRequest) {
     }
     
     if (booking) {
-      // Check if meeting link already exists
+      // ALWAYS confirm booking first - this is the critical step
+      const { error: confirmError } = await supabaseAdmin
+        .from("bookings")
+        .update({ status: "CONFIRMED" })
+        .eq("id", payment.booking_id);
+
+      if (confirmError) {
+        console.error("Failed to confirm booking:", confirmError);
+      } else {
+        console.log("Booking confirmed successfully:", payment.booking_id);
+      }
+
+      // Then try to create/update meeting link (best effort - don't block on failure)
       if (!booking.meeting_link) {
         let meetLink = "";
 
@@ -77,33 +89,23 @@ export async function POST(request: NextRequest) {
               endTime: booking.end_time,
             }
           );
+          console.log("Google Meet link created:", meetLink);
         } catch (error) {
           console.error("Failed to create Google Meet link:", error);
           // Fallback to placeholder Meet link
           meetLink = generateFallbackMeetLink(reference);
+          console.log("Using fallback Meet link:", meetLink);
         }
 
-        // Update booking with meeting link and confirm status
-        const { error: bookingUpdateError } = await supabaseAdmin
+        // Update booking with meeting link (booking is already CONFIRMED)
+        const { error: meetLinkError } = await supabaseAdmin
           .from("bookings")
-          .update({ 
-            status: "CONFIRMED",
-            meeting_link: meetLink,
-          })
+          .update({ meeting_link: meetLink })
           .eq("id", payment.booking_id);
 
-        if (bookingUpdateError) {
-          console.error("Failed to update booking:", bookingUpdateError);
-        }
-      } else {
-        // Meeting link exists, just update status
-        const { error: bookingUpdateError } = await supabaseAdmin
-          .from("bookings")
-          .update({ status: "CONFIRMED" })
-          .eq("id", payment.booking_id);
-
-        if (bookingUpdateError) {
-          console.error("Failed to update booking status:", bookingUpdateError);
+        if (meetLinkError) {
+          console.error("Failed to add meeting link to booking:", meetLinkError);
+          // Don't throw - booking is still confirmed
         }
       }
     }

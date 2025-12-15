@@ -36,31 +36,21 @@ interface UserDashboardSidebarProps {
 // Cache key for localStorage
 const USER_PROFILE_CACHE_KEY = "user_dashboard_profile";
 
+// Module-level cache - persists across component unmount/remount (same JS module in memory)
+// This ensures profile is only fetched once per browser session, not on every navigation
+let cachedProfile: { name: string; image: string | null } | null = null;
+let hasInitializedThisSession = false;
+
 export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfile }: UserDashboardSidebarProps) {
   const pathname = usePathname();
   
-  // Try to load cached profile immediately to prevent flash
-  const [userProfile, setUserProfile] = useState<{ name: string; image: string | null } | null>(() => {
-    if (initialUserProfile) return initialUserProfile;
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem(USER_PROFILE_CACHE_KEY);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          // Cache valid for 1 hour
-          if (Date.now() - parsed.timestamp < 3600000) {
-            return { name: parsed.name, image: parsed.image };
-          }
-        }
-      } catch (e) {
-        // Ignore cache errors
-      }
-    }
-    return null;
-  });
-  const [isLoading, setIsLoading] = useState(!userProfile);
+  // Initialize with module cache first (instant, no flash on navigation)
+  // Fall back to initialUserProfile prop if provided
+  const [userProfile, setUserProfile] = useState<{ name: string; image: string | null } | null>(
+    cachedProfile || initialUserProfile || null
+  );
+  const [isLoading, setIsLoading] = useState(!cachedProfile && !initialUserProfile);
   const [supabase, setSupabase] = useState<ReturnType<typeof createBrowserClient> | null>(null);
-  const [hasFetched, setHasFetched] = useState(false);
 
   // Create Supabase client instance only in browser
   useEffect(() => {
@@ -76,43 +66,56 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
   }, []);
 
   useEffect(() => {
-    console.log("UserDashboardSidebar: useEffect triggered", {
-      hasUserProfile: !!userProfile,
-      hasInitialProfile: !!initialUserProfile,
-      hasSupabase: !!supabase,
-      isLoading,
-      hasFetched,
-    });
+    // If we already initialized this browser session, use the cached profile and stop
+    // This is the key fix - module-level flag persists across component mounts
+    if (hasInitializedThisSession) {
+      console.log("UserDashboardSidebar: Already initialized this session, using cached profile");
+      if (cachedProfile && !userProfile) {
+        setUserProfile(cachedProfile);
+      }
+      setIsLoading(false);
+      return;
+    }
     
-    // If we have initialUserProfile prop, use it immediately - no need to fetch
+    // If we have initialUserProfile prop, use it immediately
     if (initialUserProfile && !userProfile) {
-      console.log("UserDashboardSidebar: Using initialUserProfile from props", initialUserProfile);
-      setUserProfile({ name: initialUserProfile.name, image: initialUserProfile.image });
+      console.log("UserDashboardSidebar: Using initialUserProfile from props");
+      const profile = { name: initialUserProfile.name, image: initialUserProfile.image };
+      cachedProfile = profile;
+      hasInitializedThisSession = true;
+      setUserProfile(profile);
       setIsLoading(false);
       return;
     }
     
-    // Only fetch if we don't have profile data and haven't fetched yet
-    if (userProfile && !hasFetched) {
-      console.log("UserDashboardSidebar: Already have cached profile, skipping fetch", userProfile);
-      setIsLoading(false);
-      // Still mark as fetched to avoid repeated fetching
-      return;
-    }
-    
-    // Skip if already fetched during this session
-    if (hasFetched) {
-      console.log("UserDashboardSidebar: Already fetched this session, skipping");
-      return;
+    // Try to load from localStorage on first mount (client-side only)
+    if (!cachedProfile && typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(USER_PROFILE_CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          // Cache valid for 1 hour
+          if (Date.now() - parsed.timestamp < 3600000) {
+            console.log("UserDashboardSidebar: Using localStorage cache");
+            const profile = { name: parsed.name, image: parsed.image };
+            cachedProfile = profile;
+            hasInitializedThisSession = true;
+            setUserProfile(profile);
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (e) {
+        // Ignore cache errors
+      }
     }
 
     if (!supabase) {
-      console.log("UserDashboardSidebar: Supabase client not ready yet, will retry when ready");
+      console.log("UserDashboardSidebar: Supabase client not ready yet");
       return;
     }
 
-    console.log("UserDashboardSidebar: Starting profile fetch effect");
-    setHasFetched(true);
+    console.log("UserDashboardSidebar: Starting profile fetch (first time this session)");
 
     let mounted = true;
 
@@ -163,22 +166,15 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
             }
           }
         } catch (timeoutError: any) {
-          // Only log as warning if we don't have initialUserProfile - timeouts are expected on slow connections
-          if (!initialUserProfile) {
-            console.warn("UserDashboardSidebar: Auth methods timed out, using fallback", timeoutError);
-          } else {
-            console.log("UserDashboardSidebar: Auth methods timed out, but have initialUserProfile - will use that");
-          }
+          console.warn("UserDashboardSidebar: Auth methods timed out, using fallback", timeoutError);
           // Both methods timed out - use initialUserProfile if available, otherwise set default
           if (mounted) {
-            if (initialUserProfile) {
-              setUserProfile({ name: initialUserProfile.name, image: initialUserProfile.image });
-            } else {
-              setUserProfile({
-                name: "User",
-                image: null,
-              });
-            }
+            const fallbackProfile = initialUserProfile 
+              ? { name: initialUserProfile.name, image: initialUserProfile.image }
+              : { name: "User", image: null };
+            cachedProfile = fallbackProfile;
+            hasInitializedThisSession = true;
+            setUserProfile(fallbackProfile);
             setIsLoading(false);
           }
           return;
@@ -190,10 +186,10 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
             hasSessionUser: !!sessionUser,
           });
           if (mounted) {
-            setUserProfile({
-              name: "User",
-              image: null,
-            });
+            const defaultProfile = { name: "User", image: null };
+            cachedProfile = defaultProfile;
+            hasInitializedThisSession = true;
+            setUserProfile(defaultProfile);
             setIsLoading(false);
           }
           return;
@@ -218,7 +214,6 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
 
         // Set profile immediately from Google auth metadata (fast, no database query needed)
         // This prevents the "Loading..." state from showing too long
-        // Always set something, even if it's just "User" - this ensures loading state clears
         const quickProfile = {
           name: googleName || sessionUser.email?.split("@")[0] || "User",
           image: googleImage,
@@ -226,14 +221,15 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
         
         console.log("UserDashboardSidebar: Setting quick profile from auth metadata", {
           userId: sessionUser.id,
-          email: sessionUser.email,
           name: quickProfile.name,
           hasImage: !!quickProfile.image,
         });
         
         if (mounted) {
+          // Update module cache with quick profile
+          cachedProfile = quickProfile;
           setUserProfile(quickProfile);
-          // Cache the quick profile
+          // Cache to localStorage for page refresh persistence
           try {
             localStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify({
               ...quickProfile,
@@ -259,8 +255,9 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
             message: userError.message,
           });
           
-          // We already set the profile from Google auth, so just return
+          // We already set the profile from Google auth, mark as initialized
           if (mounted) {
+            hasInitializedThisSession = true;
             setIsLoading(false);
           }
           return;
@@ -268,7 +265,6 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
 
         // Update profile with database data if available (prefer database name, but keep Google image for users)
         if (user && mounted) {
-          // Ensure we're using the correct authenticated user's data
           // For regular users, prefer Google image; for dietitians, use uploaded image
           const profileImage = user.role === "DIETITIAN" 
             ? (user.image || googleImage)
@@ -283,16 +279,18 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
           };
 
           console.log("UserDashboardSidebar: Setting final profile from database", {
-            userId: sessionUser.id,
             name: finalName,
             hasImage: !!profileImage,
             role: user.role,
           });
 
+          // Update module cache - this is the final profile
+          cachedProfile = profile;
+          hasInitializedThisSession = true;
           setUserProfile(profile);
           setIsLoading(false);
           
-          // Cache the final profile for faster loading on navigation
+          // Cache to localStorage for page refresh persistence
           try {
             localStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify({
               ...profile,
@@ -302,16 +300,17 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
             // Ignore cache errors
           }
         } else if (mounted) {
+          hasInitializedThisSession = true;
           setIsLoading(false);
         }
       } catch (error) {
         console.error("UserDashboardSidebar: Error fetching profile", error);
         // Set a default profile on error to ensure loading stops
         if (mounted) {
-          setUserProfile({
-            name: "User",
-            image: null,
-          });
+          const defaultProfile = { name: "User", image: null };
+          cachedProfile = defaultProfile;
+          hasInitializedThisSession = true;
+          setUserProfile(defaultProfile);
           setIsLoading(false);
         }
       } finally {
@@ -324,34 +323,25 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
     fetchUserProfile();
 
     // Safety timeout - force loading to false after 8 seconds
-    // This ensures we don't show "Loading..." forever
-    // Use initialUserProfile if available, otherwise default
     const safetyTimeout = setTimeout(() => {
-      if (mounted) {
-        setUserProfile((current) => {
-          if (!current) {
-            if (initialUserProfile) {
-              console.log("UserDashboardSidebar: Safety timeout - using initialUserProfile");
-              return { name: initialUserProfile.name, image: initialUserProfile.image };
-            } else {
-              console.warn("UserDashboardSidebar: Safety timeout - setting default profile");
-              return {
-                name: "User",
-                image: null,
-              };
-            }
-          }
-          return current;
-        });
+      if (mounted && !hasInitializedThisSession) {
+        const fallbackProfile = initialUserProfile 
+          ? { name: initialUserProfile.name, image: initialUserProfile.image }
+          : { name: "User", image: null };
+        
+        console.warn("UserDashboardSidebar: Safety timeout - using fallback profile");
+        cachedProfile = fallbackProfile;
+        hasInitializedThisSession = true;
+        setUserProfile(fallbackProfile);
         setIsLoading(false);
       }
-    }, 8000); // 8 seconds - longer timeout for slower connections
+    }, 8000);
 
     return () => {
       mounted = false;
       clearTimeout(safetyTimeout);
     };
-  }, [supabase, hasFetched]); // Run when supabase client is ready, but only once
+  }, [supabase, initialUserProfile]); // Run when supabase client is ready
 
   // Close sidebar when pathname changes on mobile
   useEffect(() => {

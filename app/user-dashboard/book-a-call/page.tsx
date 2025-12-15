@@ -706,10 +706,8 @@ function BookACallPageContent() {
                 // Navigate to success screen (step 7)
                 setStep(7);
                 
-                // Clean URL (use setTimeout to avoid hydration issues)
-                setTimeout(() => {
-                  router.replace("/user-dashboard/book-a-call", { scroll: false });
-                }, 100);
+                // Don't clean URL immediately - let user see success screen first
+                // URL will be cleaned when user navigates to dashboard
               } else if (payment?.booking_id) {
                 // Fallback: fetch booking separately if not in response
                 const bookingResponse = await fetch(`/api/bookings/${payment.booking_id}`, {
@@ -754,14 +752,40 @@ function BookACallPageContent() {
                   
                   setStep(7);
                   
-                  setTimeout(() => {
-                    router.replace("/user-dashboard/book-a-call", { scroll: false });
-                  }, 100);
+                  // Don't clean URL immediately - let user see success screen first
                 } else {
                   console.error("Failed to fetch booking:", await bookingResponse.text());
+                  // Still show success screen with minimal info
+                  setBookingDetails({
+                    id: payment.booking_id || "unknown",
+                    date: new Date(),
+                    time: "",
+                    dietician: "",
+                    duration: "45m",
+                    meetingLink: "",
+                  });
+                  setPaymentData({
+                    amount: payment.amount || eventTypePrice,
+                    currency: payment.currency || "NGN",
+                  });
+                  setStep(7);
                 }
               } else {
-                console.error("No booking found in payment verification response");
+                // No booking_id but payment exists - still show success screen
+                console.log("Payment verified but no booking found, showing success with payment data");
+                setBookingDetails({
+                  id: "pending",
+                  date: new Date(),
+                  time: "",
+                  dietician: "",
+                  duration: "45m",
+                  meetingLink: "",
+                });
+                setPaymentData({
+                  amount: payment?.amount || eventTypePrice,
+                  currency: payment?.currency || "NGN",
+                });
+                setStep(7);
               }
             } else {
               console.error("Failed to verify payment:", await response.text());
