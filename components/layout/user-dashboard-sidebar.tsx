@@ -33,12 +33,34 @@ interface UserDashboardSidebarProps {
   initialUserProfile?: { name: string; image: string | null } | null;
 }
 
+// Cache key for localStorage
+const USER_PROFILE_CACHE_KEY = "user_dashboard_profile";
+
 export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfile }: UserDashboardSidebarProps) {
   const pathname = usePathname();
-  // Use prop if provided (from server-side), otherwise fetch client-side (no sessionStorage)
-  const [userProfile, setUserProfile] = useState<{ name: string; image: string | null } | null>(initialUserProfile || null);
+  
+  // Try to load cached profile immediately to prevent flash
+  const [userProfile, setUserProfile] = useState<{ name: string; image: string | null } | null>(() => {
+    if (initialUserProfile) return initialUserProfile;
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(USER_PROFILE_CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          // Cache valid for 1 hour
+          if (Date.now() - parsed.timestamp < 3600000) {
+            return { name: parsed.name, image: parsed.image };
+          }
+        }
+      } catch (e) {
+        // Ignore cache errors
+      }
+    }
+    return null;
+  });
   const [isLoading, setIsLoading] = useState(!userProfile);
   const [supabase, setSupabase] = useState<ReturnType<typeof createBrowserClient> | null>(null);
+  const [hasFetched, setHasFetched] = useState(false);
 
   // Create Supabase client instance only in browser
   useEffect(() => {
@@ -59,6 +81,7 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
       hasInitialProfile: !!initialUserProfile,
       hasSupabase: !!supabase,
       isLoading,
+      hasFetched,
     });
     
     // If we have initialUserProfile prop, use it immediately - no need to fetch
@@ -69,10 +92,17 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
       return;
     }
     
-    // Only fetch if we don't have profile data
-    if (userProfile) {
-      console.log("UserDashboardSidebar: Already have profile, skipping fetch", userProfile);
+    // Only fetch if we don't have profile data and haven't fetched yet
+    if (userProfile && !hasFetched) {
+      console.log("UserDashboardSidebar: Already have cached profile, skipping fetch", userProfile);
       setIsLoading(false);
+      // Still mark as fetched to avoid repeated fetching
+      return;
+    }
+    
+    // Skip if already fetched during this session
+    if (hasFetched) {
+      console.log("UserDashboardSidebar: Already fetched this session, skipping");
       return;
     }
 
@@ -82,6 +112,7 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
     }
 
     console.log("UserDashboardSidebar: Starting profile fetch effect");
+    setHasFetched(true);
 
     let mounted = true;
 
@@ -202,9 +233,16 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
         
         if (mounted) {
           setUserProfile(quickProfile);
+          // Cache the quick profile
+          try {
+            localStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify({
+              ...quickProfile,
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            // Ignore cache errors
+          }
           // Don't stop loading yet - we'll fetch from database and update
-          
-          // No sessionStorage - data comes from server-side props (secure)
         }
 
         // Get user data from database using the authenticated user's ID
@@ -254,7 +292,15 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
           setUserProfile(profile);
           setIsLoading(false);
           
-          // No sessionStorage - data comes from server-side props (secure)
+          // Cache the final profile for faster loading on navigation
+          try {
+            localStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify({
+              ...profile,
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            // Ignore cache errors
+          }
         } else if (mounted) {
           setIsLoading(false);
         }
@@ -305,7 +351,7 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
       mounted = false;
       clearTimeout(safetyTimeout);
     };
-  }, [supabase]); // Run when supabase client is ready
+  }, [supabase, hasFetched]); // Run when supabase client is ready, but only once
 
   // Close sidebar when pathname changes on mobile
   useEffect(() => {

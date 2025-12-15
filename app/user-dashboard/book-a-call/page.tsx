@@ -101,6 +101,8 @@ function BookACallPageContent() {
     }
   ];
   
+  const isUuid = (val?: string) => !!val && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(val);
+
   // Initialize with all default event types (all 4 are now valid)
   const initialAvailableTypes = defaultEventTypes;
   
@@ -178,7 +180,7 @@ function BookACallPageContent() {
   });
   
   // Get event type duration for smart polling
-  const selectedEventType = eventTypes.find(et => et.id === selectedEventTypeId);
+  const selectedEventType = availableEventTypes.find(et => et.id === selectedEventTypeId) || eventTypes.find(et => et.id === selectedEventTypeId);
   const durationMinutes = selectedEventType?.length || 45;
   
   // Smart polling for timeslots (only when all required data is available)
@@ -550,12 +552,12 @@ function BookACallPageContent() {
                 return preloadedType;
               });
               
-              // Update selected event type ID if it's still using a slug
-              if (selectedEventTypeId && selectedEventTypeId.length < 36) {
-                // It might be a slug, find the real ID
+              // Update selected event type ID if it's still using a slug (non-UUID)
+              if (selectedEventTypeId && !isUuid(selectedEventTypeId)) {
                 const matched = matchedTypes.find(et => et.slug === selectedEventTypeId || et.id === selectedEventTypeId);
                 if (matched && matched.id !== selectedEventTypeId) {
                   setSelectedEventTypeId(matched.id);
+                  if (matched.price) setEventTypePrice(matched.price);
                 }
               }
               
@@ -1164,13 +1166,13 @@ function BookACallPageContent() {
               date: selectedDate,
               time: selectedTime,
               dietician: dietitians.find((d) => d.id === selectedDietician)?.name || "",
-              duration: `${eventTypes.find(et => et.id === selectedEventTypeId)?.length || 45}m`,
+              duration: `${(availableEventTypes.find(et => et.id === selectedEventTypeId) || eventTypes.find(et => et.id === selectedEventTypeId))?.length || 45}m`,
               meetingLink: "",
             });
             
             // Store booking info for PaymentModal
-            const serviceTitle = eventTypes.find(et => et.id === selectedEventTypeId)?.title || 
-                                 availableEventTypes.find(et => et.id === selectedEventTypeId)?.title || 
+            const serviceTitle = availableEventTypes.find(et => et.id === selectedEventTypeId)?.title || 
+                                 eventTypes.find(et => et.id === selectedEventTypeId)?.title || 
                                  defaultEventTypes.find(et => et.id === selectedEventTypeId)?.title || 
                                  "1-on-1 Consultation";
             const dietitianDisplayName = dietitians.find(d => d.id === selectedDietician)?.name || "Dietitian";
@@ -1375,7 +1377,7 @@ function BookACallPageContent() {
               <div>
                 <div className="flex items-center gap-2 mb-4 relative">
                   <h2 className="text-2xl font-semibold text-[#f9fafb] leading-tight flex-1 truncate">
-                    {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.title || availableEventTypes[0]?.title || "1-on-1 Consultation with Licensed Dietician"}
+                    {selectedEventTypeId && (availableEventTypes.find(et => et.id === selectedEventTypeId) || eventTypes.find(et => et.id === selectedEventTypeId))?.title || availableEventTypes[0]?.title || "1-on-1 Consultation with Licensed Dietician"}
                 </h2>
                   
                   {/* Event Type Selection Dropdown Icon */}
@@ -1433,7 +1435,7 @@ function BookACallPageContent() {
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-[#9ca3af]" />
                     <span className="text-xs sm:text-sm text-[#f9fafb]">
-                      {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.length || availableEventTypes[0]?.length || 45}m
+                      {selectedEventTypeId && (availableEventTypes.find(et => et.id === selectedEventTypeId) || eventTypes.find(et => et.id === selectedEventTypeId))?.length || availableEventTypes[0]?.length || 45}m
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1634,7 +1636,7 @@ function BookACallPageContent() {
                   {/* Service Title and Description */}
                   <div>
                     <h2 className="text-2xl font-semibold text-[#f9fafb] mb-4 line-clamp-2">
-                      {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.title || availableEventTypes[0]?.title || "1-on-1 Consultation with Licensed Dietician"}
+                      {selectedEventTypeId && (availableEventTypes.find(et => et.id === selectedEventTypeId) || eventTypes.find(et => et.id === selectedEventTypeId))?.title || availableEventTypes[0]?.title || "1-on-1 Consultation with Licensed Dietician"}
                     </h2>
                     <p className="text-sm text-[#9ca3af] leading-relaxed mb-6">
                       {selectedEventTypeId && availableEventTypes.find(et => et.id === selectedEventTypeId)?.description || availableEventTypes[0]?.description || "Have one on one consultation with Licensed Dietitician [Nutritional counseling and treatment plan]"}
@@ -1646,7 +1648,7 @@ function BookACallPageContent() {
                     <div className="flex items-center gap-3">
                       <Clock className="h-5 w-5 text-[#9ca3af]" />
                       <span className="text-sm text-[#f9fafb]">
-                        {selectedEventTypeId && eventTypes.find(et => et.id === selectedEventTypeId)?.length || availableEventTypes[0]?.length || 45}m
+                        {selectedEventTypeId && (availableEventTypes.find(et => et.id === selectedEventTypeId) || eventTypes.find(et => et.id === selectedEventTypeId))?.length || availableEventTypes[0]?.length || 45}m
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -2055,8 +2057,8 @@ function BookACallPageContent() {
                     <div className="flex justify-between text-sm gap-2">
                       <span className="text-[#9ca3af] flex-shrink-0">Service Type</span>
                       <span className="text-[#f9fafb] truncate text-right">
-                        {eventTypes.find(et => et.id === selectedEventTypeId)?.title || 
-                         availableEventTypes.find(et => et.id === selectedEventTypeId)?.title || 
+                        {availableEventTypes.find(et => et.id === selectedEventTypeId)?.title || 
+                         eventTypes.find(et => et.id === selectedEventTypeId)?.title || 
                          defaultEventTypes.find(et => et.id === selectedEventTypeId)?.title || 
                          "1-on-1 Nutritional Counselling"}
                       </span>
@@ -2064,8 +2066,8 @@ function BookACallPageContent() {
                     <div className="flex justify-between text-sm">
                       <span className="text-[#9ca3af]">Duration</span>
                       <span className="text-[#f9fafb]">
-                        {eventTypes.find(et => et.id === selectedEventTypeId)?.length || 
-                         availableEventTypes.find(et => et.id === selectedEventTypeId)?.length || 
+                        {availableEventTypes.find(et => et.id === selectedEventTypeId)?.length || 
+                         eventTypes.find(et => et.id === selectedEventTypeId)?.length || 
                          defaultEventTypes.find(et => et.id === selectedEventTypeId)?.length || 
                          45} minutes
                       </span>
