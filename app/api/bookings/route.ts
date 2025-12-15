@@ -59,14 +59,27 @@ export async function POST(request: NextRequest) {
     }
     
     // Get authenticated user - this ensures booking user_id matches the auth user
+    // getCurrentUserFromRequest will automatically create the user record if missing
     const currentUser = await getCurrentUserFromRequest(request);
-    if (!currentUser) {
-      console.error('❌ [Bookings API] No authenticated user');
+    if (!currentUser || !currentUser.id) {
+      console.error('❌ [Bookings API] No authenticated user or missing user ID', {
+        hasUser: !!currentUser,
+        userId: currentUser?.id,
+      });
       return NextResponse.json(
-        { error: 'Authentication required', details: 'Please log in to create a booking' },
+        { 
+          error: 'Authentication required', 
+          details: 'Please log in to create a booking. If you just signed in, please refresh the page and try again.' 
+        },
         { status: 401 }
       );
     }
+    
+    console.log('[Bookings API] Authenticated user:', {
+      userId: currentUser.id,
+      email: currentUser.email,
+      role: currentUser.role,
+    });
     
     const body = await request.json();
     const {
@@ -105,7 +118,7 @@ export async function POST(request: NextRequest) {
       try {
         // First try by UUID (if eventTypeId looks like a UUID)
         if (eventTypeId && eventTypeId.length === 36 && eventTypeId.includes('-')) {
-          const result = await retryWithBackoff(() =>
+          const result = await retryWithBackoff(async () =>
             supabaseAdmin
               .from("event_types")
               .select("*")
@@ -118,7 +131,7 @@ export async function POST(request: NextRequest) {
         
         // If not found by UUID, try by slug
         if (!eventTypeData && eventTypeId) {
-          const result = await retryWithBackoff(() =>
+          const result = await retryWithBackoff(async () =>
             supabaseAdmin
               .from("event_types")
               .select("*")
@@ -157,7 +170,7 @@ export async function POST(request: NextRequest) {
       try {
         // First try by UUID
         if (eventTypeId && eventTypeId.length === 36 && eventTypeId.includes('-')) {
-          const result = await retryWithBackoff(() =>
+          const result = await retryWithBackoff(async () =>
             supabaseAdmin
               .from("event_types")
               .select("*, users(*)")
@@ -170,7 +183,7 @@ export async function POST(request: NextRequest) {
         
         // If not found by UUID, try by slug
         if (!eventTypeData && eventTypeId) {
-          const result = await retryWithBackoff(() =>
+          const result = await retryWithBackoff(async () =>
             supabaseAdmin
               .from("event_types")
               .select("*, users(*)")
@@ -205,13 +218,90 @@ export async function POST(request: NextRequest) {
     }
 
     // Use the authenticated user - this ensures consistency with auth system
-    // The user already exists since they're authenticated
+    // getCurrentUserFromRequest now automatically creates the user record if missing
     const user = currentUser;
+    
+    // Double-check that user exists in database before creating booking
+    // This is a safety check to ensure the foreign key constraint will be satisfied
+    if (!user || !user.id) {
+      console.error("[Bookings API] Invalid user object:", { user, currentUser });
+      return NextResponse.json(
+        { error: "Invalid user", details: "User record is missing or invalid" },
+        { status: 401 }
+      );
+    }
+    
+    // Verify user exists in database before proceeding
+    // This ensures the foreign key constraint will be satisfied
+    const { data: verifyUser, error: verifyError } = await supabaseAdmin
+      .from("users")
+      .select("id, email, role")
+      .eq("id", user.id)
+      .single();
+    
+    if (verifyError || !verifyUser) {
+      console.error("[Bookings API] User verification failed before booking creation:", {
+        userId: user.id,
+        userEmail: user.email,
+        error: verifyError?.message,
+        code: verifyError?.code,
+        details: verifyError?.details,
+        hint: verifyError?.hint,
+      });
+      
+      return NextResponse.json(
+        { 
+          error: "User record not found", 
+          details: `User with ID ${user.id} does not exist in the database. This may happen if your account was just created. Please refresh the page and try again.` 
+        },
+        { status: 500 }
+      );
+    }
+    
+    console.log("[Bookings API] User verified successfully:", {
+      userId: verifyUser.id,
+      email: verifyUser.email,
+    });
+
+    // Validate eventType exists and has required fields
+    if (!eventType || !eventType.id) {
+      console.error("[Bookings API] Invalid eventType:", { eventType, eventTypeId });
+      return NextResponse.json(
+        { error: "Invalid event type", details: "Event type data is missing or invalid" },
+        { status: 400 }
+      );
+    }
+
+    // Validate dietitian_id
+    const finalDietitianId = dietitian_id || eventType.user_id;
+    if (!finalDietitianId) {
+      console.error("[Bookings API] Missing dietitian_id:", { dietitianId, eventType });
+      return NextResponse.json(
+        { error: "Missing dietitian information", details: "Could not determine dietitian for this booking" },
+        { status: 400 }
+      );
+    }
 
     // Calculate end time if not provided
     const startTimeDate = new Date(startTime);
+    if (isNaN(startTimeDate.getTime())) {
+      return NextResponse.json(
+        { error: "Invalid start time", details: `startTime: ${startTime}` },
+        { status: 400 }
+      );
+    }
+    
     const durationMinutes = eventType.length || 30;
     const endTimeDate = endTime ? new Date(endTime) : new Date(startTimeDate.getTime() + durationMinutes * 60000);
+
+    console.log("[Bookings API] Creating booking:", {
+      title: eventType.title,
+      event_type_id: eventType.id,
+      user_id: user.id,
+      dietitian_id: finalDietitianId,
+      start_time: startTimeDate.toISOString(),
+      end_time: endTimeDate.toISOString(),
+    });
 
     // Create booking - use eventType.id (the actual UUID) not eventTypeId (which could be a slug)
     const { data: booking, error: bookingError } = await supabaseAdmin
@@ -224,7 +314,7 @@ export async function POST(request: NextRequest) {
         status: "PENDING",
         event_type_id: eventType.id,
         user_id: user.id,
-        dietitian_id: dietitian_id || eventType.user_id,
+        dietitian_id: finalDietitianId,
         user_age: userAge,
         user_occupation: userOccupation,
         user_medical_condition: userMedicalCondition,
@@ -235,8 +325,19 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (bookingError) {
+      console.error("[Bookings API] Database error creating booking:", {
+        error: bookingError,
+        code: bookingError.code,
+        message: bookingError.message,
+        details: bookingError.details,
+        hint: bookingError.hint,
+      });
       return NextResponse.json(
-        { error: "Failed to create booking", details: bookingError.message },
+        { 
+          error: "Failed to create booking", 
+          details: bookingError.message || bookingError.details || "Database error occurred",
+          code: bookingError.code,
+        },
         { status: 500 }
       );
     }
