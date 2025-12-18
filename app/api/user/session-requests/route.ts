@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClientServer } from "@/lib/supabase/server";
 import { requireAuthFromRequest } from "@/lib/auth-helpers";
 import { formatDietitianName } from "@/lib/utils/dietitian-name";
+import type { SessionRequestCreate, SessionRequest } from "@/lib/types/session-requests";
+import { ValidationError, NotFoundError, logError, logInfo } from "@/lib/error-handling";
 
 // GET: Fetch pending session requests for the authenticated user
 export async function GET(request: NextRequest) {
@@ -9,12 +11,16 @@ export async function GET(request: NextRequest) {
     const user = await requireAuthFromRequest(request);
     const userEmail = user.email;
 
-    console.log("Fetching session requests for user:", userEmail);
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    logInfo("Fetching session requests for user", { 
+      userEmail, 
+      normalizedEmail,
+      userId: user.id 
+    });
 
     const supabaseAdmin = createAdminClientServer();
     
-    // Fetch session requests for this user
-    // Try simpler query first - without foreign key joins
+    // Fetch session requests for this user - normalize email to lowercase
     const { data: requests, error } = await supabaseAdmin
       .from("session_requests")
       .select(`
@@ -33,16 +39,17 @@ export async function GET(request: NextRequest) {
         created_at,
         dietitian_id
       `)
-      .eq("client_email", userEmail)
+      .eq("client_email", normalizedEmail)
       .in("status", ["PENDING", "RESCHEDULE_REQUESTED"])
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching session requests:", {
-        error: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
+      logError(new Error(error.message), {
+        userId: user.id,
+        userEmail: normalizedEmail,
+        errorCode: error.code,
+        errorDetails: error.details,
+        operation: "fetch_session_requests",
       });
       return NextResponse.json(
         { 
@@ -53,6 +60,13 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    logInfo("Found session requests", {
+      count: requests?.length || 0,
+      normalizedEmail,
+      userId: user.id,
+      requestIds: requests?.map((r: any) => r.id),
+    });
 
     // Fetch related data separately if needed
     const requestsWithRelations = await Promise.all(
@@ -101,6 +115,23 @@ export async function GET(request: NextRequest) {
               }
             }
           }
+        }
+
+        // For meal plan requests, check if meal plan has been sent (has PDF)
+        if (req.request_type === "MEAL_PLAN") {
+          const { data: mealPlan } = await supabaseAdmin
+            .from("meal_plans")
+            .select("id, file_url, status, sent_at")
+            .eq("session_request_id", req.id)
+            .single();
+          
+          result.mealPlan = mealPlan ? {
+            id: mealPlan.id,
+            fileUrl: mealPlan.file_url,
+            status: mealPlan.status,
+            sentAt: mealPlan.sent_at,
+            hasPdf: !!mealPlan.file_url,
+          } : null;
         }
 
         // Fetch dietitian info
@@ -171,6 +202,157 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching user session requests:", error);
     return NextResponse.json(
       { error: "Failed to fetch session requests", details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// POST: Create a session request for the authenticated user (e.g., after meal plan purchase)
+export async function POST(request: NextRequest) {
+  try {
+    const user = await requireAuthFromRequest(request);
+    const userEmail = user.email;
+    const userName = user.name || userEmail.split("@")[0];
+
+    const body = await request.json() as SessionRequestCreate;
+    const {
+      dietitianId,
+      requestType,
+      mealPlanType,
+      notes,
+      paymentData,
+      price,
+      currency,
+      packageName,
+    } = body;
+
+    logInfo("Creating session request", {
+      userId: user.id,
+      userEmail,
+      dietitianId,
+      requestType,
+      mealPlanType: mealPlanType || packageName,
+    });
+
+    // Validate required fields
+    if (!dietitianId) {
+      throw new ValidationError("Dietitian ID is required");
+    }
+
+    if (requestType !== "MEAL_PLAN") {
+      throw new ValidationError("Only MEAL_PLAN requests are supported for user-initiated requests");
+    }
+
+    const finalMealPlanType = mealPlanType || packageName;
+    if (!finalMealPlanType) {
+      throw new ValidationError("Meal plan type is required");
+    }
+
+    // Verify dietitian/therapist exists
+    const supabaseAdmin = createAdminClientServer();
+    const { data: dietitian, error: dietitianError } = await supabaseAdmin
+      .from("users")
+      .select("id, name, email, role")
+      .eq("id", dietitianId)
+      .in("role", ["DIETITIAN", "THERAPIST"])
+      .single();
+
+    if (dietitianError || !dietitian) {
+      logError(new Error("Dietitian not found"), {
+        userId: user.id,
+        dietitianId,
+        error: dietitianError?.message,
+      });
+      throw new NotFoundError("Dietitian not found or invalid");
+    }
+
+    // Get price from meal plan constants if not provided
+    let finalPrice = price;
+    let finalCurrency = currency || "NGN";
+    
+    if (!finalPrice) {
+      try {
+        const { MEAL_PLAN_PACKAGES } = await import("@/lib/constants/meal-plans");
+        // Try to find by name first (since frontend sends packageName), then by id
+        const mealPlanPackage = MEAL_PLAN_PACKAGES.find(
+          pkg => pkg.name === finalMealPlanType || pkg.id === finalMealPlanType
+        );
+        if (mealPlanPackage) {
+          finalPrice = mealPlanPackage.price;
+          finalCurrency = mealPlanPackage.currency;
+        }
+      } catch (e) {
+        console.warn("Could not load meal plan package for pricing:", e);
+      }
+    }
+
+    // Create session request - normalize email to lowercase for consistency
+    const insertData: any = {
+      request_type: "MEAL_PLAN",
+      client_name: userName,
+      client_email: userEmail.toLowerCase().trim(),
+      dietitian_id: dietitianId,
+      meal_plan_type: finalMealPlanType,
+      status: "PENDING",
+      message: notes || `Meal Plan Purchase: ${finalMealPlanType}`,
+      price: finalPrice || 0,
+      currency: finalCurrency,
+    };
+
+    const { data: newRequest, error: insertError } = await supabaseAdmin
+      .from("session_requests")
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (insertError) {
+      logError(new Error(insertError.message), {
+        userId: user.id,
+        dietitianId,
+        mealPlanType: finalMealPlanType,
+        errorCode: insertError.code,
+        errorDetails: insertError.details,
+        operation: "create_session_request",
+      });
+      return NextResponse.json(
+        { 
+          error: "Failed to create session request", 
+          details: insertError.message 
+        },
+        { status: 500 }
+      );
+    }
+
+    logInfo("Session request created successfully", {
+      requestId: newRequest.id,
+      userId: user.id,
+      dietitianId,
+      mealPlanType: finalMealPlanType,
+      paymentReference: paymentData?.reference,
+    });
+
+    return NextResponse.json({ 
+      success: true,
+      request: newRequest 
+    });
+  } catch (error: any) {
+    // Handle AppError instances
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code, details: error.details },
+        { status: error.statusCode }
+      );
+    }
+
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      operation: "create_session_request",
+    });
+
+    return NextResponse.json(
+      { 
+        error: "Failed to create session request", 
+        details: error?.message || "Unknown error" 
+      },
       { status: 500 }
     );
   }

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     // Allow unauthenticated users to query availability for booking
     // If authenticated, check if they're querying their own availability
     const currentUser = await getCurrentUserFromRequest(request);
-    const dietitianId = (currentUser?.role === "DIETITIAN" && targetDietitianId === currentUser.id) 
+    const dietitianId = ((currentUser?.role === "DIETITIAN" || currentUser?.role === "THERAPIST") && targetDietitianId === currentUser.id) 
       ? currentUser.id 
       : targetDietitianId;
     
@@ -79,9 +79,9 @@ export async function GET(request: NextRequest) {
       .eq("id", dietitianId)
       .single();
 
-    if (dietitianError || !targetDietitian || targetDietitian.role !== "DIETITIAN") {
+    if (dietitianError || !targetDietitian || (targetDietitian.role !== "DIETITIAN" && targetDietitian.role !== "THERAPIST")) {
       return NextResponse.json(
-        { error: "Dietitian not found" },
+        { error: "Dietitian/Therapist not found" },
         { status: 404 }
       );
     }

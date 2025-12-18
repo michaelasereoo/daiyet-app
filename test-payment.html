@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment Flow Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #f9fafb;
+        }
+        .log {
+            background: #171717;
+            border: 1px solid #262626;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .info { color: #60a5fa; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Meal Plan Purchase Flow Test</h1>
+    <div id="log" class="log">Starting test...\n</div>
+    <button onclick="runTest()" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer;">Run Test Again</button>
+
+    <script>
+        const log = document.getElementById('log');
+        
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            log.textContent += `[${timestamp}] ${message}\n`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        async function runTest() {
+            log.textContent = '🧪 Starting meal plan purchase test...\n\n';
+            
+            const testPurchase = {
+                packageId: "test",
+                packageName: "Test Meal Plan",
+                price: 100,
+                currency: "NGN",
+                dietitianId: "af000df5-8213-4765-815b-8c896456aaf8",
+                dietitianName: "Test Dietitian",
+            };
+
+            try {
+                // Step 1: Store purchase
+                addLog('📦 Step 1: Storing purchase in localStorage', 'info');
+                localStorage.setItem("pendingMealPlanPurchase", JSON.stringify(testPurchase));
+                addLog(`✅ Purchase stored: ${JSON.stringify(testPurchase, null, 2)}`, 'success');
+
+                // Step 2: Create session request
+                addLog('\n📝 Step 2: Creating session request...', 'info');
+                const response = await fetch("/api/user/session-requests", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        dietitianId: testPurchase.dietitianId,
+                        requestType: "MEAL_PLAN",
+                        mealPlanType: testPurchase.packageName,
+                        notes: `Test Meal Plan Purchase: ${testPurchase.packageName}`,
+                        paymentData: { reference: "test_ref_" + Date.now() },
+                        price: testPurchase.price,
+                        currency: testPurchase.currency,
+                    }),
+                });
+
+                const data = await response.json();
+                addLog(`Response status: ${response.status}`, response.ok ? 'success' : 'error');
+                addLog(`Response data: ${JSON.stringify(data, null, 2)}`, response.ok ? 'success' : 'error');
+
+                if (response.ok) {
+                    addLog(`✅ Session request created! ID: ${data.request?.id}`, 'success');
+                    
+                    // Step 3: Verify it appears
+                    addLog('\n📋 Step 3: Checking if it appears in pending list...', 'info');
+                    const listResponse = await fetch("/api/user/session-requests", {
+                        credentials: "include",
+                    });
+                    const listData = await listResponse.json();
+                    addLog(`Total requests: ${listData.requests?.length || 0}`, 'info');
+                    
+                    const found = listData.requests?.find(r => r.id === data.request?.id);
+                    if (found) {
+                        addLog('✅ Request found in pending list!', 'success');
+                        addLog(`Request details: ${JSON.stringify(found, null, 2)}`, 'success');
+                    } else {
+                        addLog('❌ Request NOT found in list', 'error');
+                        addLog(`All requests: ${JSON.stringify(listData.requests, null, 2)}`, 'error');
+                    }
+                } else {
+                    addLog(`❌ Failed to create session request: ${data.error || data.message}`, 'error');
+                    addLog(`Details: ${JSON.stringify(data, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                addLog(`❌ Error: ${error.message}`, 'error');
+                addLog(`Stack: ${error.stack}`, 'error');
+            }
+
+            addLog('\n🏁 Test completed!', 'info');
+        }
+
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            setTimeout(runTest, 1000);
+        });
+    </script>
+</body>
+</html>
+

@@ -34,7 +34,14 @@ export default function ProfilePage() {
       setLoading(true);
       try {
         // SINGLE SERVICE CALL - gets everything from database
-        const data = await dietitianService.getDietitianProfile(effectiveUserId);
+        // Add a timeout so the page can't get stuck on "Loading profile..."
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Profile fetch timed out")), 10000)
+        );
+        const data = await Promise.race([
+          dietitianService.getDietitianProfile(effectiveUserId),
+          timeoutPromise,
+        ]) as DietitianProfile;
         
         // If name or email is missing from database, fallback to Google auth metadata
         if ((!data.name || data.name.trim() === '') || (!data.email || data.email.trim() === '')) {
@@ -280,25 +287,41 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        {/* Username Section */}
+        {/* Public Profile Link Section */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-[#D4D4D4]">
-            Username
+            Public Profile Link
           </label>
-          <div className="flex items-center">
-            <span className="px-3 py-2 bg-[#0a0a0a] border border-r-0 border-[#262626] text-[#9ca3af] text-sm rounded-l-md">
-              daiyet.co/
-            </span>
-            <Input
-              type="text"
-              value={nameToSlug(profile?.name || '')}
-              onChange={() => {}}
-              disabled
-              className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb] rounded-l-none rounded-r-md focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:border-[#404040] opacity-50 cursor-not-allowed"
-            />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center flex-1">
+              <span className="px-3 py-2 bg-[#0a0a0a] border border-r-0 border-[#262626] text-[#9ca3af] text-sm rounded-l-md whitespace-nowrap">
+                daiyet.store/Dietitian/
+              </span>
+              <Input
+                type="text"
+                value={nameToSlug(profile?.name || '')}
+                onChange={() => {}}
+                disabled
+                className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb] rounded-l-none rounded-r-md focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:border-[#404040] opacity-50 cursor-not-allowed"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const slug = nameToSlug(profile?.name || '');
+                if (slug) {
+                  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+                  window.open(`${baseUrl}/Dietitian/${slug}`, '_blank');
+                }
+              }}
+              disabled={!profile?.name?.trim()}
+              className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717] px-4 py-2 whitespace-nowrap"
+            >
+              Open Public Link
+            </Button>
           </div>
           <p className="text-xs text-[#9ca3af]">
-            Tip: You can add a '+' between usernames: cal.com/anna+brian to make a dynamic group meeting
+            Share this link with clients to let them book consultations directly with you.
           </p>
         </div>
 

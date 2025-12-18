@@ -242,13 +242,16 @@ export default function DietitianEnrollmentPage() {
     }
     
     try {
-      // Use NEXT_PUBLIC_SITE_URL if available (for production), otherwise use window.location.origin
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+      // ALWAYS use the current browser origin for OAuth redirects
+      const currentOrigin = window.location.origin;
+      const callbackUrl = `${currentOrigin}/auth/callback?source=dietitian-enrollment`;
+      
+      console.log('🔐 Dietitian Enrollment OAuth redirect:', callbackUrl);
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${siteUrl}/auth/callback?source=dietitian-enrollment`,
+          redirectTo: callbackUrl,
         },
       });
 

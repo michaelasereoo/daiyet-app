@@ -19,7 +19,7 @@ export interface UserProfile {
 export function normalizeRole(role: string | null | undefined): UserRole {
   if (!role) return "USER";
   const normalized = String(role).toUpperCase().trim();
-  if (normalized === "DIETITIAN" || normalized === "ADMIN") {
+  if (normalized === "DIETITIAN" || normalized === "ADMIN" || normalized === "THERAPIST") {
     return normalized as UserRole;
   }
   return "USER";

@@ -1,6 +1,7 @@
 "use client";
 
-import { Clock, Calendar, CheckCircle, XCircle, Mail } from "lucide-react";
+import { Clock, Calendar, CheckCircle, XCircle, Mail, Upload, FileText, Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
@@ -22,17 +23,81 @@ export interface SessionRequest {
   currency?: string;
   requestedDate?: string;
   createdAt: string;
+  mealPlan?: {
+    id: string;
+    fileUrl: string | null;
+    status: string;
+    sentAt: string | null;
+    hasPdf: boolean;
+  } | null;
 }
 
 interface SessionRequestListProps {
   requests: SessionRequest[];
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
+  onUploadPdf?: (id: string) => void;
+  onSendMealPlan?: (id: string) => void;
+  uploadedFiles?: Record<string, { fileUrl: string; fileName: string; storagePath?: string }>;
+  isSending?: Record<string, boolean>;
+  uploadInProgress?: Record<string, boolean>;
 }
 
-export function SessionRequestList({ requests, onApprove, onReject }: SessionRequestListProps) {
+export function SessionRequestList({ 
+  requests, 
+  onApprove, 
+  onReject, 
+  onUploadPdf,
+  onSendMealPlan,
+  uploadedFiles = {},
+  isSending = {},
+  uploadInProgress = {},
+}: SessionRequestListProps) {
+  // Debug: Log approved meal plans with detailed info
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    const approvedMealPlans = requests.filter(r => r.status === "APPROVED" && r.requestType === "MEAL_PLAN");
+    if (approvedMealPlans.length > 0) {
+      console.group("[SessionRequestList] Approved Meal Plans Debug");
+      approvedMealPlans.forEach((r, index) => {
+        console.log(`\n=== Meal Plan Request ${index + 1} ===`);
+        console.log("Request ID:", r.id);
+        console.log("Status:", r.status);
+        console.log("Has mealPlan object:", !!r.mealPlan);
+        if (r.mealPlan) {
+          console.log("Meal Plan ID:", r.mealPlan.id);
+          console.log("File URL:", r.mealPlan.fileUrl);
+          console.log("File URL type:", typeof r.mealPlan.fileUrl);
+          console.log("File URL length:", r.mealPlan.fileUrl?.length || 0);
+          console.log("Has PDF:", r.mealPlan.hasPdf);
+          console.log("Full mealPlan object:", r.mealPlan);
+        } else {
+          console.warn("⚠️ mealPlan is NULL or undefined!");
+        }
+        console.log("Full request object:", r);
+      });
+      console.groupEnd();
+      
+      // Log any approved meal plans without PDFs
+      const withoutPdf = approvedMealPlans.filter(r => !r.mealPlan?.fileUrl);
+      if (withoutPdf.length > 0) {
+        console.groupCollapsed("⚠️ Approved meal plans WITHOUT PDF");
+        withoutPdf.forEach((r, index) => {
+          console.log(`\nRequest ${index + 1}:`, {
+            id: r.id,
+            mealPlan: r.mealPlan,
+            fileUrl: r.mealPlan?.fileUrl,
+            hasPdf: r.mealPlan?.hasPdf,
+          });
+        });
+        console.groupEnd();
+      }
+    }
+  }
+
   const getMealPlanName = (type: string) => {
     const mealPlans: Record<string, string> = {
+      "test": "Test Meal Plan",
+      "Test Meal Plan": "Test Meal Plan",
       "7-day": "7-day meal plan",
       "14-day": "14-day meal plan",
       "1-month": "1 month meal plan",
@@ -135,20 +200,90 @@ export function SessionRequestList({ requests, onApprove, onReject }: SessionReq
 
             {/* Actions - only show for pending */}
             {request.status === "PENDING" && (
-              <div className="flex items-center gap-2 ml-4">
-                <button
-                  onClick={() => onReject?.(request.id)}
-                  className="p-2 text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                  title="Reject request"
-                >
-                  <XCircle className="h-5 w-5" />
-                </button>
+              <div className="flex flex-col items-end gap-2 ml-4">
+                {request.requestType === "MEAL_PLAN" ? (
+                  // For meal plans, show Upload PDF or Send button
+                  <>
+                    {uploadedFiles[request.id] ? (
+                      <>
+                        {/* Show PDF preview */}
+                        <div className="text-xs text-[#9ca3af] mb-1 text-right">
+                          <FileText className="h-3 w-3 inline mr-1" />
+                          {uploadedFiles[request.id].fileName}
+                        </div>
+                        {/* Show Send button */}
+                        <Button
+                          onClick={() => onSendMealPlan?.(request.id)}
+                          disabled={isSending[request.id]}
+                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm"
+                        >
+                          {isSending[request.id] ? (
+                            <>
+                              <span className="animate-spin mr-2">⏳</span>
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4 mr-2" />
+                              Send
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        onClick={() => onUploadPdf?.(request.id)}
+                        disabled={uploadInProgress[request.id]}
+                        className={`bg-white hover:bg-gray-100 text-black px-4 py-2 text-sm ${uploadInProgress[request.id] ? "opacity-60 cursor-not-allowed" : ""}`}
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        {uploadInProgress[request.id] ? "Uploading..." : "Upload PDF"}
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  // For consultations, show reject button
+                  <button
+                    onClick={() => onReject?.(request.id)}
+                    className="p-2 text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                    title="Reject request"
+                  >
+                    <XCircle className="h-5 w-5" />
+                  </button>
+                )}
               </div>
             )}
 
             {request.status === "APPROVED" && (
-              <div className="ml-4">
-                <CheckCircle className="h-5 w-5 text-green-400" />
+              <div className="flex items-center gap-2 ml-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-400" />
+                  <span className="text-xs text-green-400">Sent</span>
+                </div>
+                {request.requestType === "MEAL_PLAN" && (
+                  <>
+                    {request.mealPlan?.fileUrl ? (
+                      <Button
+                        onClick={() => {
+                          if (request.mealPlan?.fileUrl) {
+                            window.open(request.mealPlan.fileUrl, '_blank');
+                          }
+                        }}
+                        variant="outline"
+                        className="px-4 py-2 text-sm bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#171717]"
+                        title="Click to view PDF in new tab"
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        View PDF
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-yellow-400 bg-yellow-900/20 border border-yellow-800/30 rounded">
+                        <FileText className="h-3 w-3" />
+                        <span>PDF not available</span>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>

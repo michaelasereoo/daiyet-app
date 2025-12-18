@@ -108,6 +108,49 @@ export async function POST(request: NextRequest) {
           // Don't throw - booking is still confirmed
         }
       }
+      
+      // Update session request status to APPROVED if there's a pending session request for this booking
+      // Find session request by matching booking user, dietitian, and event type
+      if (booking.user_id && booking.dietitian_id && booking.event_type_id) {
+        try {
+          // Get user email first
+          const { data: userData } = await supabaseAdmin
+            .from("users")
+            .select("email")
+            .eq("id", booking.user_id)
+            .single();
+          
+          if (userData?.email) {
+            // Find pending session request matching this booking
+            const { data: sessionRequests, error: srError } = await supabaseAdmin
+              .from("session_requests")
+              .select("id, status")
+              .eq("client_email", userData.email.toLowerCase().trim())
+              .eq("dietitian_id", booking.dietitian_id)
+              .eq("event_type_id", booking.event_type_id)
+              .eq("status", "PENDING")
+              .order("created_at", { ascending: false })
+              .limit(1);
+            
+            if (!srError && sessionRequests && sessionRequests.length > 0) {
+              const sessionRequest = sessionRequests[0];
+              const { error: updateSRError } = await supabaseAdmin
+                .from("session_requests")
+                .update({ status: "APPROVED" })
+                .eq("id", sessionRequest.id);
+              
+              if (updateSRError) {
+                console.error(`Failed to update session request ${sessionRequest.id}:`, updateSRError);
+              } else {
+                console.log(`Session request ${sessionRequest.id} approved after payment verification`);
+              }
+            }
+          }
+        } catch (srLookupError) {
+          console.error("Error looking up session request:", srLookupError);
+          // Don't fail payment verification if session request lookup fails
+        }
+      }
     }
 
     // Fetch the updated booking to include in response

@@ -18,9 +18,10 @@ export async function GET(request: NextRequest) {
     const supabaseAdmin = createAdminClientServer();
     
     // Fetch all bookings for this dietitian with user information
+    // Only include users with role = 'USER' (exclude dietitians)
     const { data: bookings, error } = await supabaseAdmin
       .from("bookings")
-      .select("user:users!bookings_user_id_fkey(id, name, email)")
+      .select("user:users!bookings_user_id_fkey(id, name, email, role)")
       .eq("dietitian_id", dietitianId);
 
     if (error) {
@@ -32,11 +33,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Deduplicate users by user ID (keep first occurrence)
+    // Only include users with role = 'USER' (exclude dietitians)
     const uniqueUsersMap = new Map<string, { id: string; name: string; email: string }>();
     
     bookings?.forEach((booking: any) => {
       const user = booking.user;
-      if (user && user.id && !uniqueUsersMap.has(user.id)) {
+      // Only include users with role = 'USER', exclude dietitians and other roles
+      if (user && user.id && user.role === 'USER' && !uniqueUsersMap.has(user.id)) {
         uniqueUsersMap.set(user.id, {
           id: user.id,
           name: user.name || "Unknown",

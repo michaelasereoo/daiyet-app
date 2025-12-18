@@ -384,8 +384,16 @@ export async function POST(request: NextRequest) {
 
     // Update session request status if sessionRequestId is provided
     if (sessionRequestId) {
-      // TODO: Update session_requests table status to APPROVED
-      console.log(`Session request ${sessionRequestId} approved for booking ${booking.id}`);
+      const { error: updateSessionRequestError } = await supabaseAdmin
+        .from("session_requests")
+        .update({ status: "APPROVED" })
+        .eq("id", sessionRequestId);
+      
+      if (updateSessionRequestError) {
+        console.error(`Failed to update session request ${sessionRequestId}:`, updateSessionRequestError);
+      } else {
+        console.log(`Session request ${sessionRequestId} approved for booking ${booking.id}`);
+      }
     }
 
     // Send booking confirmation email if payment was already successful
@@ -465,8 +473,8 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin.from("bookings").select("*");
 
-    if (currentUser.role === "DIETITIAN") {
-      // Dietitians see their own bookings
+    if (currentUser.role === "DIETITIAN" || currentUser.role === "THERAPIST") {
+      // Dietitians/Therapists see their own bookings
       query = query.eq("dietitian_id", currentUser.id);
     } else {
       // Regular users see bookings they created

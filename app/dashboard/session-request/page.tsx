@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server/client";
 import { createAdminClientServer } from "@/lib/supabase/server";
+import { getDevUserFromPath } from "@/lib/auth-helpers";
 import SessionRequestClient from "./SessionRequestClient";
 
 /**
@@ -18,6 +19,12 @@ import SessionRequestClient from "./SessionRequestClient";
  */
 export default async function SessionRequestPage() {
   try {
+    // DEVELOPMENT MODE: Use hardcoded dietitian user
+    const devUser = getDevUserFromPath('/dashboard/session-request');
+    if (devUser && devUser.role === 'DIETITIAN') {
+      return <SessionRequestClient />;
+    }
+
     // 1. Check authentication (server-side)
     const supabase = await createClient();
     const {

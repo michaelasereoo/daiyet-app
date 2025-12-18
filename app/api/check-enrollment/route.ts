@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check if user is enrolled (has DIETITIAN role)
+    // Check if user is enrolled (has DIETITIAN or THERAPIST role)
     // Use admin client to bypass RLS
     const supabaseAdmin = createAdminClientServer();
     const { data: userData, error: userError } = await supabaseAdmin
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const isEnrolled = userData?.role === "DIETITIAN";
+    const isEnrolled = userData?.role === "DIETITIAN" || userData?.role === "THERAPIST";
     return NextResponse.json({
       enrolled: isEnrolled,
       role: userData?.role || null,

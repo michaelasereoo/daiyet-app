@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { User, Upload } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import { NIGERIA_STATES } from "@/constants/nigeriaStates";
 
 interface UserProfile {
   name: string;
@@ -16,6 +18,10 @@ interface UserProfile {
   occupation?: string | null;
   medicalCondition?: string | null;
   monthlyFoodBudget?: number | null;
+  gender?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  state?: string | null;
 }
 
 interface ProfileSettingsClientProps {
@@ -51,6 +57,10 @@ export default function ProfileSettingsClient({ initialUserProfile }: ProfileSet
             occupation: profile?.occupation || null,
             medicalCondition: profile?.medical_condition || null,
             monthlyFoodBudget: profile?.monthly_food_budget || null,
+            gender: profile?.gender || null,
+            phone: profile?.phone || null,
+            city: profile?.city || null,
+            state: profile?.state || null,
           });
         }
       } catch (err) {
@@ -77,6 +87,10 @@ export default function ProfileSettingsClient({ initialUserProfile }: ProfileSet
           occupation: userProfile.occupation || null,
           medical_condition: userProfile.medicalCondition || null,
           monthly_food_budget: userProfile.monthlyFoodBudget ? parseFloat(userProfile.monthlyFoodBudget.toString()) : null,
+          gender: userProfile.gender || null,
+          phone: userProfile.phone || null,
+          city: userProfile.city || null,
+          state: userProfile.state || null,
         }),
       });
 
@@ -226,6 +240,89 @@ export default function ProfileSettingsClient({ initialUserProfile }: ProfileSet
               <p className="text-xs text-[#9ca3af]">
                 Email is synced from your Google account.
               </p>
+            </div>
+
+            {/* Gender */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-[#D4D4D4]">
+                Gender
+              </label>
+              <div className="relative">
+                <select
+                  value={userProfile?.gender || ""}
+                  onChange={(e) => setUserProfile((prev) => ({
+                    ...prev!,
+                    gender: e.target.value || null,
+                  }))}
+                  className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                  <option value="prefer-not-to-say">Prefer not to say</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#9ca3af] pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Phone Number */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-[#D4D4D4]">
+                Phone Number
+              </label>
+              <Input
+                type="tel"
+                value={userProfile?.phone || ""}
+                onChange={(e) => setUserProfile((prev) => ({
+                  ...prev!,
+                  phone: e.target.value || null,
+                }))}
+                className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb]"
+                placeholder="Enter your phone number"
+              />
+            </div>
+
+            {/* City */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-[#D4D4D4]">
+                City
+              </label>
+              <Input
+                type="text"
+                value={userProfile?.city || ""}
+                onChange={(e) => setUserProfile((prev) => ({
+                  ...prev!,
+                  city: e.target.value || null,
+                }))}
+                className="bg-[#0a0a0a] border-[#262626] text-[#f9fafb]"
+                placeholder="Enter your city"
+              />
+            </div>
+
+            {/* State */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-[#D4D4D4]">
+                State
+              </label>
+              <div className="relative">
+                <select
+                  value={userProfile?.state || ""}
+                  onChange={(e) => setUserProfile((prev) => ({
+                    ...prev!,
+                    state: e.target.value || null,
+                  }))}
+                  className="w-full bg-[#0a0a0a] border border-[#262626] text-[#f9fafb] rounded px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-0 focus:border-[#404040]"
+                >
+                  <option value="">Select state</option>
+                  {NIGERIA_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#9ca3af] pointer-events-none" />
+              </div>
             </div>
 
             {/* Age */}

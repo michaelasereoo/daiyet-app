@@ -12,6 +12,11 @@ const PUBLIC_ROUTES = [
   "/auth/error",
   "/dietitian-login",
   "/dietitian-enrollment",
+  "/therapist-login",
+  "/therapist-enrollment",
+  "/therapy",
+  "/therapy/book",
+  "/Therapist",
   "/login",
   "/signup",
   "/admin-login",
@@ -32,6 +37,7 @@ const PUBLIC_ROUTES = [
 // Define role-based route access
 const ROLE_ROUTES = {
   DIETITIAN: ["/dashboard", "/dietitian", "/profile"],
+  THERAPIST: ["/therapist-dashboard", "/therapist", "/profile"],
   ADMIN: ["/admin", "/analytics", "/users"], // Admin should NOT access /dashboard - that's for dietitians only
   USER: ["/user-dashboard", "/profile", "/settings"],
 } as const;
@@ -129,13 +135,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
     
-    // Allow public access to event-types and availability/timeslots when dietitianId is provided
+    // Allow public access to event-types and availability/timeslots when dietitianId or therapistId is provided
     // These routes handle their own authentication logic
     if (pathname === "/api/event-types" || pathname === "/api/availability/timeslots") {
       const { searchParams } = new URL(request.url);
       const dietitianId = searchParams.get("dietitianId");
-      // If dietitianId is provided, allow public access (for booking flow)
-      if (dietitianId) {
+      const therapistId = searchParams.get("therapistId");
+      // If dietitianId or therapistId is provided, allow public access (for booking flow)
+      if (dietitianId || therapistId) {
         return NextResponse.next();
       }
       // Otherwise, continue to auth check below (for private access)
@@ -180,6 +187,8 @@ export async function middleware(request: NextRequest) {
       let signinPath = "/auth/signin";
       if (pathname.startsWith("/dashboard")) {
         signinPath = "/dietitian-login";
+      } else if (pathname.startsWith("/therapist-dashboard")) {
+        signinPath = "/therapist-login";
       } else if (pathname.startsWith("/admin")) {
         signinPath = "/admin-login";
       }
@@ -222,7 +231,11 @@ export async function middleware(request: NextRequest) {
       });
 
       // User doesn't exist in database - redirect to complete profile
-      return NextResponse.redirect(new URL("/dietitian-enrollment", request.url));
+      // Check route to determine which enrollment to redirect to
+      const enrollmentPath = pathname.startsWith("/therapist-dashboard") 
+        ? "/therapist-enrollment" 
+        : "/dietitian-enrollment";
+      return NextResponse.redirect(new URL(enrollmentPath, request.url));
     }
 
     // Check account status
@@ -277,7 +290,35 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL(redirectPath, request.url));
     }
     
-    const allowedRoutes = ROLE_ROUTES[userRole] || ROLE_ROUTES.USER;
+    // Special check for therapist dashboard: only THERAPIST role can access
+    if (pathname.startsWith("/therapist-dashboard") && userRole !== "THERAPIST") {
+      console.warn("MiddlewareTherapistDashboardAccessDenied", {
+        userId: session.user.id,
+        userRole,
+        requestedPath: pathname,
+        timestamp: new Date().toISOString(),
+      });
+      
+      // Redirect to appropriate dashboard based on role
+      const redirectPath = authConfig.redirects[userRole] || "/";
+      return NextResponse.redirect(new URL(redirectPath, request.url));
+    }
+    
+    // Special check for user dashboard: only USER role can access
+    if (pathname.startsWith("/user-dashboard") && userRole !== "USER") {
+      console.warn("MiddlewareUserDashboardAccessDenied", {
+        userId: session.user.id,
+        userRole,
+        requestedPath: pathname,
+        timestamp: new Date().toISOString(),
+      });
+      
+      // Redirect to appropriate dashboard based on role
+      const redirectPath = authConfig.redirects[userRole] || "/";
+      return NextResponse.redirect(new URL(redirectPath, request.url));
+    }
+    
+    const allowedRoutes = ROLE_ROUTES[userRole as keyof typeof ROLE_ROUTES] || ROLE_ROUTES.USER;
 
     // Check if user has access to this route
     const hasAccess = allowedRoutes.some((route) => pathname.startsWith(route));

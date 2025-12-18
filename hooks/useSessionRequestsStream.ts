@@ -17,6 +17,13 @@ interface SessionRequest {
   duration?: number;
   requestedDate?: string;
   createdAt: string;
+  mealPlan?: {
+    id: string;
+    fileUrl: string | null;
+    status: string;
+    sentAt: string | null;
+    hasPdf: boolean;
+  } | null;
 }
 
 export function useSessionRequestsStream() {

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Send, Calendar } from "lucide-react";
+import { X, Send, Calendar, CheckCircle } from "lucide-react";
 
 interface CreateSessionRequestModalProps {
   isOpen: boolean;
@@ -43,6 +43,7 @@ export function CreateSessionRequestModal({
   const [eventTypes, setEventTypes] = useState<Array<{ id: string; title: string }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Fetch clients when modal opens
   useEffect(() => {
@@ -203,9 +204,8 @@ export function CreateSessionRequestModal({
         throw new Error(data.error || "Failed to create session request");
       }
 
-      // Success - close modal and refresh list
-      handleClose();
-      onSuccess();
+      // Success - show success modal
+      setShowSuccessModal(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create session request");
       console.error("Error creating session request:", err);
@@ -214,9 +214,67 @@ export function CreateSessionRequestModal({
     }
   };
 
+  const handleSuccessClose = () => {
+    setShowSuccessModal(false);
+    handleClose();
+    onSuccess();
+  };
+
   if (!isOpen) return null;
 
   const selectedMealPlan = MEAL_PLAN_TYPES.find(mp => mp.id === mealPlanType);
+
+  // Show success modal
+  if (showSuccessModal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={handleSuccessClose}>
+        <div
+          className="bg-[#171717] border border-[#262626] rounded-lg w-full max-w-md shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-8 text-center">
+            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="h-8 w-8 text-white" />
+            </div>
+            <h2 className="text-2xl font-semibold text-[#f9fafb] mb-2">
+              Request Sent Successfully!
+            </h2>
+            <p className="text-sm text-[#9ca3af] mb-6">
+              Your {requestType === "CONSULTATION" ? "consultation" : "meal plan"} request has been sent to{" "}
+              <span className="text-[#f9fafb] font-medium">{clientName}</span>.
+              {requestType === "CONSULTATION" 
+                ? " They will be notified and can select their preferred time slot."
+                : " They will be notified and can proceed with payment."}
+            </p>
+            
+            <div className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-4 mb-6 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-[#9ca3af]">Client</span>
+                <span className="text-sm font-medium text-[#f9fafb]">{clientName}</span>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-[#9ca3af]">Email</span>
+                <span className="text-sm text-[#f9fafb]">{clientEmail}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-[#9ca3af]">Request Type</span>
+                <span className="text-sm font-medium text-[#f9fafb]">
+                  {requestType === "CONSULTATION" ? "Consultation" : "Meal Plan"}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleSuccessClose}
+              className="w-full bg-white hover:bg-gray-100 text-black px-4 py-2"
+            >
+              OK
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={handleClose}>

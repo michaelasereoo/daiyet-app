@@ -1,5 +1,25 @@
+"use client";
+
 import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { AuthScreen } from "@/components/auth/AuthScreen";
+
+function SignupContent() {
+  const searchParams = useSearchParams();
+  const source = searchParams.get("source");
+  
+  // Determine source for tracking - if source=therapy, pass it through
+  const authSource = source === "therapy" ? "therapy-signup" : undefined;
+
+  return (
+    <AuthScreen
+      title="Get started for free"
+      subtitle="Join Daiyet with your Google account to book and manage consultations."
+      redirectPath="/user-dashboard"
+      source={authSource}
+    />
+  );
+}
 
 export default function SignupPage() {
   return (
@@ -10,11 +30,7 @@ export default function SignupPage() {
         </div>
       </div>
     }>
-      <AuthScreen
-        title="Get started for free"
-        subtitle="Join Daiyet with your Google account to book and manage consultations."
-        redirectPath="/user-dashboard"
-      />
+      <SignupContent />
     </Suspense>
   );
 }

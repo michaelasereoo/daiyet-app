@@ -1,11 +1,25 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server/client";
 import { createAdminClientServer } from "@/lib/supabase/server";
+import { getDevUserFromPath } from "@/lib/auth-helpers";
 import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
 import MealPlanClient from "./MealPlanClient";
 
 export default async function MealPlanPage() {
   try {
+    // DEVELOPMENT MODE: Use hardcoded dietitian user
+    const devUser = getDevUserFromPath('/dashboard/meal-plan');
+    if (devUser && devUser.role === 'DIETITIAN') {
+      return (
+        <div className="min-h-screen bg-[#0a0a0a] flex">
+          <DashboardSidebar />
+          <main className="flex-1 bg-[#101010] overflow-y-auto w-full lg:ml-64 lg:rounded-tl-lg">
+            <MealPlanClient dietitianId={devUser.id} />
+          </main>
+        </div>
+      );
+    }
+
     // 1. Check authentication (server-side)
     const supabase = await createClient();
     const {

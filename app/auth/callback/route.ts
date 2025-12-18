@@ -20,12 +20,20 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
-  // Use NEXT_PUBLIC_SITE_URL if available (for production), otherwise use request origin
+  // In development (localhost), always use request origin
+  // In production, use NEXT_PUBLIC_SITE_URL if available, otherwise use request origin
   // Trim any whitespace to prevent URL parsing errors
-  const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL 
-    ? new URL(process.env.NEXT_PUBLIC_SITE_URL.trim()).origin 
-    : requestUrl.origin;
-  const { code, error: oauthError, error_description } = Object.fromEntries(requestUrl.searchParams);
+  const isLocalhost = requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1';
+  const siteOrigin = isLocalhost 
+    ? requestUrl.origin
+    : (process.env.NEXT_PUBLIC_SITE_URL 
+        ? new URL(process.env.NEXT_PUBLIC_SITE_URL.trim()).origin 
+        : requestUrl.origin);
+  const { code, error: oauthError, error_description, source } = Object.fromEntries(requestUrl.searchParams);
+  
+  // Determine signup_source from source parameter
+  // If source is "therapy-signup" or "therapy-login", set signup_source to "therapy"
+  const signupSource = (source === "therapy-signup" || source === "therapy-login") ? "therapy" : null;
 
   // STEP 1: Handle OAuth errors FIRST
   if (oauthError) {
@@ -139,6 +147,10 @@ export async function GET(request: NextRequest) {
     const source = requestUrl.searchParams.get("source");
     const cameFromDietitianLogin = source === "dietitian-login";
     const cameFromDietitianEnrollment = source === "dietitian-enrollment";
+    const cameFromTherapistEnrollment = source === "therapist-enrollment";
+    const cameFromPublicBooking = source === "public-booking";
+    const cameFromTherapyBooking = source === "therapy-booking";
+    const redirectPath = requestUrl.searchParams.get("redirect");
     
     // Check if this is the admin email
     const isAdminEmail = user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
@@ -159,7 +171,7 @@ export async function GET(request: NextRequest) {
     // Fetch full user data - try regardless of role fetch result to handle all cases
     const { data: fetchedUser, error: fetchError } = await supabaseAdmin
       .from("users")
-      .select("id, role, email, name, image, account_status, email_verified")
+      .select("id, role, email, name, image, account_status, email_verified, signup_source")
       .eq("id", user.id)
       .single();
 
@@ -170,14 +182,22 @@ export async function GET(request: NextRequest) {
       const shouldBeAdmin = isAdminEmail && dbUser.role !== "ADMIN";
       
       // Update last sign-in for existing user, and role if needed
+      // Also update signup_source if logging in from therapy flow and not already set
+      const updateData: any = {
+        last_sign_in_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...(googleImage && !dbUser.image ? { image: googleImage } : {}),
+        ...(shouldBeAdmin ? { role: "ADMIN" } : {}),
+      };
+      
+      // Set signup_source if logging in from therapy flow and user doesn't have it set
+      if (signupSource && !dbUser.signup_source) {
+        updateData.signup_source = signupSource;
+      }
+      
       await supabaseAdmin
         .from("users")
-        .update({
-          last_sign_in_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          ...(googleImage && !dbUser.image ? { image: googleImage } : {}),
-          ...(shouldBeAdmin ? { role: "ADMIN" } : {}),
-        })
+        .update(updateData)
         .eq("id", user.id);
       
       // Update dbUser if role was changed
@@ -224,6 +244,7 @@ export async function GET(request: NextRequest) {
           account_status: "ACTIVE",
           email_verified: user.email_confirmed_at || null,
           last_sign_in_at: new Date().toISOString(),
+          signup_source: signupSource,
           metadata: {
             provider: userMetadata?.provider || "google",
             provider_id: userMetadata?.provider_id,
@@ -317,6 +338,66 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
+    // Handle public booking flow FIRST - redirect back to the public profile page with connected=true
+    // This takes precedence over role-based redirects since user is in the middle of booking
+    if (cameFromPublicBooking || cameFromTherapyBooking) {
+      console.info("AuthCallbackPublicBookingRedirect", {
+        userId: user.id,
+        email: user.email,
+        finalRole,
+        redirectPath,
+        hasRedirectPath: !!redirectPath,
+        source,
+        timestamp: new Date().toISOString(),
+      });
+      
+      // If redirectPath is provided, use it; otherwise try to extract from referer or default to a public profile
+      let targetPath = redirectPath;
+      
+      if (!targetPath) {
+        // Try to get from referer header as fallback
+        const referer = request.headers.get("referer");
+        if (referer) {
+          try {
+            const refererUrl = new URL(referer);
+            if (refererUrl.pathname.startsWith('/Dietitian/')) {
+              targetPath = refererUrl.pathname;
+            } else if (refererUrl.pathname.startsWith('/Therapist/')) {
+              targetPath = refererUrl.pathname;
+            } else if (refererUrl.pathname.startsWith('/therapy/')) {
+              targetPath = refererUrl.pathname;
+            }
+          } catch (e) {
+            console.warn("Could not parse referer URL:", e);
+          }
+        }
+      }
+      
+      // If we still don't have a path, default based on source
+      if (!targetPath) {
+        if (cameFromTherapyBooking) {
+          targetPath = "/therapy/book-a-call";
+        } else {
+          // Default for public booking (dietitian)
+          targetPath = "/";
+        }
+      }
+      
+      // Ensure redirectPath starts with / and is a valid path
+      const cleanRedirectPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`;
+      const redirectUrl = new URL(`${cleanRedirectPath}?connected=true`, siteOrigin);
+      const response = NextResponse.redirect(redirectUrl);
+      response.headers.set("X-Auth-Status", "success");
+      response.headers.set("X-Robots-Tag", "noindex, nofollow");
+      response.headers.set(
+        "Cache-Control",
+        "no-store, no-cache, must-revalidate, proxy-revalidate"
+      );
+      response.headers.set("Pragma", "no-cache");
+      response.headers.set("Expires", "0");
+      return response;
+    }
+
     // Handle dietitian enrollment flow: if user is already DIETITIAN, redirect to dashboard
     if (cameFromDietitianEnrollment && finalRole === "DIETITIAN") {
       console.info("AuthCallbackDietitianEnrollmentAlreadyEnrolled", {
@@ -328,6 +409,41 @@ export async function GET(request: NextRequest) {
       const redirectTo = "/dashboard";
       const response = NextResponse.redirect(new URL(redirectTo, siteOrigin));
       response.headers.set("X-Auth-Status", "success");
+      return response;
+    }
+
+    // Handle therapist enrollment flow: if user is already THERAPIST, redirect to dashboard
+    if (cameFromTherapistEnrollment && finalRole === "THERAPIST") {
+      console.info("AuthCallbackTherapistEnrollmentAlreadyEnrolled", {
+        userId: user.id,
+        role: finalRole,
+        source,
+        timestamp: new Date().toISOString(),
+      });
+      const redirectTo = "/therapist-dashboard";
+      const response = NextResponse.redirect(new URL(redirectTo, siteOrigin));
+      response.headers.set("X-Auth-Status", "success");
+      return response;
+    }
+
+    // If came from therapist-enrollment and user is not enrolled (not THERAPIST), redirect back to enrollment with connected=true
+    if (cameFromTherapistEnrollment && finalRole !== "THERAPIST") {
+      console.info("AuthCallbackTherapistEnrollmentNotEnrolled", {
+        userId: user.id,
+        role: finalRole,
+        source,
+        timestamp: new Date().toISOString(),
+      });
+      const redirectTo = "/therapist-enrollment?connected=true";
+      const response = NextResponse.redirect(new URL(redirectTo, siteOrigin));
+      response.headers.set("X-Auth-Status", "success");
+      response.headers.set("X-Robots-Tag", "noindex, nofollow");
+      response.headers.set(
+        "Cache-Control",
+        "no-store, no-cache, must-revalidate, proxy-revalidate"
+      );
+      response.headers.set("Pragma", "no-cache");
+      response.headers.set("Expires", "0");
       return response;
     }
 
@@ -367,7 +483,7 @@ export async function GET(request: NextRequest) {
       return response;
     }
     
-    // Otherwise, use normal redirect logic (handles DIETITIAN, ADMIN, and USER roles correctly)
+    // Otherwise, use normal redirect logic (handles DIETITIAN, THERAPIST, ADMIN, and USER roles correctly)
     // If user is DIETITIAN, ensure they go to /dashboard regardless of source
     if (finalRole === "DIETITIAN") {
       console.info("AuthCallbackDietitianDetected", {
@@ -390,7 +506,30 @@ export async function GET(request: NextRequest) {
       response.headers.set("Expires", "0");
       return response;
     }
-    
+
+    // If user is THERAPIST, ensure they go to /therapist-dashboard regardless of source
+    if (finalRole === "THERAPIST") {
+      console.info("AuthCallbackTherapistDetected", {
+        userId: user.id,
+        email: user.email,
+        finalRole,
+        cameFromTherapistEnrollment,
+        source,
+        timestamp: new Date().toISOString(),
+      });
+      const redirectTo = "/therapist-dashboard";
+      const response = NextResponse.redirect(new URL(redirectTo, siteOrigin));
+      response.headers.set("X-Auth-Status", "success");
+      response.headers.set("X-Robots-Tag", "noindex, nofollow");
+      response.headers.set(
+        "Cache-Control",
+        "no-store, no-cache, must-revalidate, proxy-revalidate"
+      );
+      response.headers.set("Pragma", "no-cache");
+      response.headers.set("Expires", "0");
+      return response;
+    }
+
     const redirectTo = await determineUserRedirect(user.id);
 
     console.info("AuthCallbackSuccess", {

@@ -1,5 +1,25 @@
+"use client";
+
 import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { AuthScreen } from "@/components/auth/AuthScreen";
+
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const source = searchParams.get("source");
+  
+  // Determine source for tracking - if source=therapy, pass it through
+  const authSource = source === "therapy" ? "therapy-login" : undefined;
+
+  return (
+    <AuthScreen
+      title="Welcome back"
+      subtitle="Sign in with Google to access your Daiyet workspace."
+      redirectPath="/user-dashboard"
+      source={authSource}
+    />
+  );
+}
 
 export default function LoginPage() {
   return (
@@ -10,11 +30,7 @@ export default function LoginPage() {
         </div>
       </div>
     }>
-      <AuthScreen
-        title="Welcome back"
-        subtitle="Sign in with Google to access your Daiyet workspace."
-        redirectPath="/user-dashboard"
-      />
+      <LoginContent />
     </Suspense>
   );
 }

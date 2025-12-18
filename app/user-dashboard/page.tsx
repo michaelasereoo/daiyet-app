@@ -50,6 +50,7 @@ export default function UserDashboardPage() {
   const [paymentData, setPaymentData] = useState<any>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [mealPlansCount, setMealPlansCount] = useState(0);
+  const [signupSource, setSignupSource] = useState<string | null>(null);
 
   // Use SSE for real-time bookings
   const { bookings, isConnected: bookingsConnected, error: bookingsError } = useBookingsStream();
@@ -86,7 +87,7 @@ export default function UserDashboardPage() {
     fetchSessionRequests();
     fetchMealPlansCount();
     
-    // Fetch user name for welcome message - fetch from API securely (no sessionStorage)
+    // Fetch user name and signup_source for welcome message - fetch from API securely (no sessionStorage)
     const fetchUserName = async () => {
       try {
         const response = await fetch("/api/user/profile", {
@@ -97,6 +98,9 @@ export default function UserDashboardPage() {
           const profile = data.profile;
           if (profile?.name) {
             setUserName(profile.name);
+          }
+          if (profile?.signup_source) {
+            setSignupSource(profile.signup_source);
           } else {
             // Fallback: try to get from session
             const { createBrowserClient } = await import("@/lib/supabase/client");
@@ -146,8 +150,45 @@ export default function UserDashboardPage() {
       const data = await response.json();
       const requests = data.requests || [];
       
+      console.log("Fetched session requests:", {
+        count: requests.length,
+        requests: requests.map((r: any) => ({
+          id: r.id,
+          requestType: r.requestType,
+          status: r.status,
+          mealPlanType: r.mealPlanType,
+          clientEmail: r.clientEmail,
+          dietitian: r.dietitian,
+        })),
+        rawData: data,
+      });
+      
       if (Array.isArray(requests) && requests.length > 0) {
-        setSessionRequests(requests);
+        // Filter out meal plans that have been sent (have PDF) - they should be in Received Meal Plans
+        // Also filter out meal plans older than 24 hours (regardless of status) - they move to Received section
+        const now = new Date();
+        const filteredRequests = requests.filter((req: any) => {
+          // IMPORTANT: Filter out APPROVED session requests - they've been paid for and should not show
+          if (req.status === "APPROVED") {
+            return false;
+          }
+          
+          // If it's a meal plan request
+          if (req.requestType === "MEAL_PLAN") {
+            // If meal plan has been sent (has PDF), exclude it from pending requests
+            if (req.mealPlan?.hasPdf) {
+              return false;
+            }
+            // If it's older than 24 hours, exclude it (moves to Received section)
+            const createdAt = new Date(req.createdAt);
+            const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+            if (hoursSinceCreation > 24) {
+              return false;
+            }
+          }
+          return true;
+        });
+        setSessionRequests(filteredRequests);
       } else {
         setSessionRequests([]);
       }
@@ -218,10 +259,14 @@ export default function UserDashboardPage() {
         // Show success modal
         setIsSuccessModalOpen(true);
         
+        // Refresh session requests to ensure list is up to date
+        fetchSessionRequests();
+        
         // Update summary stats
         if (selectedRequest.requestType === "MEAL_PLAN") {
           // Increment meal plans purchased (mock update)
           console.log("Meal plan purchased, incrementing count");
+          fetchMealPlansCount();
         }
       }
     } catch (err) {
@@ -234,6 +279,9 @@ export default function UserDashboardPage() {
     setIsSuccessModalOpen(false);
     setSelectedRequest(null);
     setPaymentData(null);
+    
+    // Refresh session requests to remove approved ones
+    fetchSessionRequests();
     
     if (requestType === "MEAL_PLAN") {
       // Redirect to meal plan page where the approved meal plan will show
@@ -259,9 +307,16 @@ export default function UserDashboardPage() {
         <div className="p-6 lg:p-8 pt-6 lg:pt-8">
           {/* Header Section */}
           <div className="mb-6">
-            <h1 className="text-xl lg:text-[15px] font-semibold text-[#f9fafb] mb-1">
-              {userName ? `Welcome back, ${userName}!` : "Dashboard"}
-            </h1>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-xl lg:text-[15px] font-semibold text-[#f9fafb]">
+                {userName ? `Welcome back, ${userName}!` : "Dashboard"}
+              </h1>
+              {signupSource === "therapy" && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  Therapy
+                </span>
+              )}
+            </div>
             <p className="text-[13px] text-[#9ca3af] mb-6">
               Overview of your sessions and meal plans.
             </p>
@@ -290,20 +345,20 @@ export default function UserDashboardPage() {
               <div className="text-xl lg:text-2xl font-semibold text-[#f9fafb]">{upcomingMeetings.toLocaleString()}</div>
             </div>
 
-            {/* Meal Plans Purchased Card */}
+            {/* Meal Plans / Assessment Tests Card */}
             <div className="border border-[#262626] rounded-lg px-4 lg:px-6 py-3 lg:py-4 bg-transparent flex items-center justify-between">
-              <div className="text-xs lg:text-sm text-[#9ca3af]">Meal Plans Purchased</div>
+              <div className="text-xs lg:text-sm text-[#9ca3af]">{signupSource === "therapy" ? "Assessment Tests" : "Meal Plans"}</div>
               <div className="text-xl lg:text-2xl font-semibold text-[#f9fafb]">{mealPlansCount.toLocaleString()}</div>
             </div>
           </div>
 
-          {/* Requested Sessions & Meal Plans Section */}
+          {/* Requested Sessions & Meal Plans / Assessment Tests Section */}
           <div className="mb-8">
             <h2 className="text-[15px] font-semibold text-[#f9fafb] mb-1">
-              Requested Sessions & Meal Plans
+              Requested Sessions & {signupSource === "therapy" ? "Assessment Tests" : "Meal Plans"}
             </h2>
             <p className="text-[13px] text-[#9ca3af] mb-6">
-              Approve or reject requests from your dietitians. Click "Approve" to proceed with payment and booking.
+              View pending requests from your {signupSource === "therapy" ? "therapists" : "dietitians"}. {signupSource === "therapy" ? "Assessment tests" : "Meal plans"} you purchased will show a "View PDF" button once your {signupSource === "therapy" ? "therapist" : "dietitian"} sends them.
             </p>
             {loading ? (
               <div className="text-center py-8">

@@ -123,12 +123,37 @@ export default function MealPlanClient({ dietitianId }: MealPlanClientProps) {
 
       if (!uploadResponse.ok) {
         const errorData = await uploadResponse.json();
-        throw new Error(errorData.error || "Failed to upload file");
+        console.error("Upload failed:", {
+          status: uploadResponse.status,
+          error: errorData,
+          fullResponse: errorData,
+        });
+        
+        // Show detailed error message
+        let errorMessage = errorData.error || "Failed to upload file";
+        if (errorData.details) {
+          errorMessage += `: ${errorData.details}`;
+        }
+        if (errorData.buckets) {
+          errorMessage += `\n\nAvailable buckets: ${errorData.buckets.join(", ")}`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const uploadData = await uploadResponse.json();
 
-      // Then, create the meal plan
+      // Validate that fileUrl exists and is valid
+      if (!uploadData.fileUrl || !uploadData.fileUrl.trim()) {
+        throw new Error("PDF upload failed: No file URL returned. Please try uploading again.");
+      }
+
+      // Verify the URL is valid
+      if (!uploadData.fileUrl.startsWith('http://') && !uploadData.fileUrl.startsWith('https://')) {
+        throw new Error("PDF upload failed: Invalid file URL. Please try uploading again.");
+      }
+
+      // Then, create the meal plan - this will only approve if fileUrl is valid
       const mealPlanResponse = await fetch("/api/meal-plans", {
         method: "POST",
         credentials: "include",
@@ -146,7 +171,14 @@ export default function MealPlanClient({ dietitianId }: MealPlanClientProps) {
 
       if (!mealPlanResponse.ok) {
         const errorData = await mealPlanResponse.json();
-        throw new Error(errorData.error || "Failed to create meal plan");
+        throw new Error(errorData.error || errorData.details || "Failed to create meal plan");
+      }
+
+      const mealPlanData = await mealPlanResponse.json();
+      
+      // Verify the meal plan was created with a valid file URL
+      if (!mealPlanData.mealPlan?.fileUrl) {
+        throw new Error("Meal plan was created but PDF file URL is missing. The request will remain pending. Please try uploading again.");
       }
 
       // Refresh meal plans
@@ -178,10 +210,35 @@ export default function MealPlanClient({ dietitianId }: MealPlanClientProps) {
 
           if (!uploadResponse.ok) {
             const errorData = await uploadResponse.json();
-            throw new Error(errorData.error || "Failed to upload file");
+            console.error("Upload failed:", {
+              status: uploadResponse.status,
+              error: errorData,
+              fullResponse: errorData,
+            });
+            
+            // Show detailed error message
+            let errorMessage = errorData.error || "Failed to upload file";
+            if (errorData.details) {
+              errorMessage += `: ${errorData.details}`;
+            }
+            if (errorData.buckets) {
+              errorMessage += `\n\nAvailable buckets: ${errorData.buckets.join(", ")}`;
+            }
+            
+            throw new Error(errorMessage);
           }
 
           const uploadData = await uploadResponse.json();
+
+          // Validate that fileUrl exists and is valid
+          if (!uploadData.fileUrl || !uploadData.fileUrl.trim()) {
+            throw new Error("PDF upload failed: No file URL returned. Please try uploading again.");
+          }
+
+          // Verify the URL is valid
+          if (!uploadData.fileUrl.startsWith('http://') && !uploadData.fileUrl.startsWith('https://')) {
+            throw new Error("PDF upload failed: Invalid file URL. Please try uploading again.");
+          }
 
           // Find the pending plan to get its details
           const plan = pendingPlans.find(p => p.id === planId);
@@ -189,7 +246,7 @@ export default function MealPlanClient({ dietitianId }: MealPlanClientProps) {
             throw new Error("Plan not found");
           }
 
-          // Create meal plan from pending request
+          // Create meal plan from pending request - this will only approve if fileUrl is valid
           const mealPlanResponse = await fetch("/api/meal-plans", {
             method: "POST",
             credentials: "include",
@@ -207,11 +264,19 @@ export default function MealPlanClient({ dietitianId }: MealPlanClientProps) {
 
           if (!mealPlanResponse.ok) {
             const errorData = await mealPlanResponse.json();
-            throw new Error(errorData.error || "Failed to create meal plan");
+            throw new Error(errorData.error || errorData.details || "Failed to create meal plan");
+          }
+
+          const mealPlanData = await mealPlanResponse.json();
+          
+          // Verify the meal plan was created with a valid file URL
+          if (!mealPlanData.mealPlan?.fileUrl) {
+            throw new Error("Meal plan was created but PDF file URL is missing. The request will remain pending. Please try uploading again.");
           }
 
           // Refresh meal plans
           await fetchMealPlans();
+          alert("Meal plan PDF uploaded and sent successfully! The request has been approved.");
         } catch (error) {
           console.error("Error uploading meal plan:", error);
           alert(error instanceof Error ? error.message : "Failed to upload meal plan");

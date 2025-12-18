@@ -29,7 +29,7 @@ export default function UpcomingMeetingsPage() {
     fetchInitialBookings();
   }, []);
 
-  // Filter to only upcoming confirmed bookings
+  // Filter to only upcoming CONFIRMED bookings in the future
   const now = new Date();
   const upcomingBookings = bookings.filter(
     (b) => b.status === "CONFIRMED" && new Date(b.startTime) >= now

@@ -19,6 +19,8 @@ interface MealPlan {
   status: "pending" | "received" | "paid-pending";
   dieticianName?: string;
   purchasedDate?: Date;
+  hasPdf?: boolean;
+  mealPlanId?: string;
 }
 
 interface MealPlanPackage {
@@ -45,26 +47,122 @@ export default function UserMealPlanPage() {
   const [selectedPurchase, setSelectedPurchase] = useState<SelectedPurchase | null>(null);
   const [pendingPlans, setPendingPlans] = useState<MealPlan[]>([]);
   const [sessionRequests, setSessionRequests] = useState<any[]>([]);
+  const [signupSource, setSignupSource] = useState<string | null>(null);
 
-  // Use SSE for real-time meal plans
-  const { mealPlans, isConnected, error: mealPlansError } = useMealPlansStream();
-  const [initialMealPlansLoaded, setInitialMealPlansLoaded] = useState(false);
-
-  // Preload meal plans data immediately
+  // Fetch signup_source to determine labels
   useEffect(() => {
-    const fetchInitialMealPlans = async () => {
+    const fetchSignupSource = async () => {
       try {
-        const response = await fetch("/api/meal-plans", {
+        const response = await fetch("/api/user/profile", {
           credentials: "include",
         });
         if (response.ok) {
-          setInitialMealPlansLoaded(true);
+          const data = await response.json();
+          if (data.profile?.signup_source) {
+            setSignupSource(data.profile.signup_source);
+          }
         }
       } catch (err) {
-        console.error("Error preloading meal plans:", err);
+        console.error("Error fetching signup source:", err);
       }
     };
-    fetchInitialMealPlans();
+    fetchSignupSource();
+  }, []);
+
+  // Determine labels based on signup_source
+  const pageTitle = signupSource === "therapy" ? "Assessment Tests" : "Meal Plans";
+  const pageDescription = signupSource === "therapy" 
+    ? "Browse available assessment test packages and view your purchased tests."
+    : "Browse available meal plan packages and view your purchased meal plans.";
+  const pendingSectionTitle = signupSource === "therapy" ? "Pending Assessment Tests" : "Pending Meal Plans";
+  const availableSectionTitle = signupSource === "therapy" ? "Available Assessment Tests" : "Available Meal Plans";
+  const receivedSectionTitle = signupSource === "therapy" ? "Received Assessment Tests" : "Received Meal Plans";
+
+  // Use SSE for real-time meal plans (handles both USER and DIETITIAN roles)
+  const { mealPlans, isConnected, error: mealPlansError } = useMealPlansStream();
+
+  // Handle payment success from Paystack redirect
+  useEffect(() => {
+    const handlePaymentCallback = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const paymentStatus = urlParams.get("payment");
+      const reference = urlParams.get("reference");
+
+      console.log("[MEAL PLAN] Checking payment callback:", { paymentStatus, reference });
+
+      if (paymentStatus === "success" && reference) {
+        console.log("[MEAL PLAN] Payment successful, reference:", reference);
+        
+        // Verify payment and get payment details
+        try {
+          const verifyResponse = await fetch("/api/payments/verify", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reference }),
+          });
+
+          if (verifyResponse.ok) {
+            const paymentData = await verifyResponse.json();
+            console.log("Payment verified:", paymentData);
+
+            // Get payment metadata to find the purchase details
+            const { data: payment } = await fetch("/api/payments", {
+              credentials: "include",
+            }).then(r => r.json()).catch(() => ({ data: null }));
+
+            // Try to get purchase details from localStorage (stored before redirect)
+            const storedPurchase = localStorage.getItem("pendingMealPlanPurchase");
+            console.log("[MEAL PLAN] Stored purchase from localStorage:", storedPurchase);
+            
+            if (storedPurchase) {
+              try {
+                const purchase = JSON.parse(storedPurchase);
+                console.log("[MEAL PLAN] Parsed purchase:", purchase);
+                
+                // Create session request
+                const response = await fetch("/api/user/session-requests", {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    dietitianId: purchase.dietitianId,
+                    requestType: "MEAL_PLAN" as const,
+                    mealPlanType: purchase.packageName,
+                    notes: `Meal Plan Purchase: ${purchase.packageName}`,
+                    paymentData: { reference },
+                    price: purchase.price,
+                    currency: purchase.currency,
+                  }),
+                });
+
+                const responseData = await response.json();
+                if (response.ok) {
+                  console.log("✅ Session request created successfully:", responseData);
+                  localStorage.removeItem("pendingMealPlanPurchase");
+                  // Clean URL params
+                  window.history.replaceState({}, "", "/user-dashboard/meal-plan");
+                  // Refresh to show new request
+                  window.location.reload();
+                } else {
+                  console.error("❌ Failed to create session request:", responseData);
+                  alert(`Payment successful, but failed to create request: ${responseData.error || "Unknown error"}`);
+                }
+              } catch (err) {
+                console.error("Error parsing stored purchase:", err);
+              }
+            } else {
+              console.warn("No stored purchase found, payment was successful but can't create request");
+              alert("Payment successful! Please contact support if your meal plan request doesn't appear.");
+            }
+          }
+        } catch (error) {
+          console.error("Error verifying payment:", error);
+        }
+      }
+    };
+
+    handlePaymentCallback();
   }, []);
 
   // Fetch pending meal plans from session requests
@@ -76,12 +174,17 @@ export default function UserMealPlanPage() {
         });
         if (response.ok) {
           const data = await response.json();
+          // Filter meal plan requests that are still pending (not sent yet)
+          // Exclude meal plans that have been sent (have PDF) - they should be in Received section
           const mealPlanRequests = (data.requests || []).filter(
-            (req: any) => req.requestType === "MEAL_PLAN" && req.status === "PENDING"
+            (req: any) => 
+              req.requestType === "MEAL_PLAN" && 
+              req.status === "PENDING" &&
+              !req.mealPlan?.hasPdf // Exclude if PDF has been sent
           );
           setSessionRequests(mealPlanRequests);
           
-          // Map to pending plans
+          // Map to pending plans with meal plan info
           setPendingPlans(
             mealPlanRequests.map((req: any) => ({
               id: req.id,
@@ -90,7 +193,9 @@ export default function UserMealPlanPage() {
               dieticianName: req.dietitian?.name || "Unknown",
               status: "pending" as const,
               receivedDate: new Date(),
-              pdfUrl: "",
+              pdfUrl: req.mealPlan?.fileUrl || "",
+              hasPdf: req.mealPlan?.hasPdf || false,
+              mealPlanId: req.mealPlan?.id,
             }))
           );
         }
@@ -105,6 +210,25 @@ export default function UserMealPlanPage() {
   // Separate meal plans into pending and received
   const receivedMealPlans = mealPlans.filter((mp) => mp.status === "SENT" && mp.fileUrl);
   const paidPendingMealPlans = mealPlans.filter((mp) => mp.status === "SENT" && !mp.fileUrl);
+  
+  // Also check session requests for meal plans that should be in received section
+  // (sent by dietitian or older than 24 hours)
+  const now = new Date();
+  const receivedFromRequests = sessionRequests.filter((req: any) => {
+    if (req.requestType === "MEAL_PLAN") {
+      // Include if it has PDF (sent by dietitian)
+      if (req.mealPlan?.hasPdf) {
+        return true;
+      }
+      // Include if older than 24 hours
+      const createdAt = new Date(req.createdAt);
+      const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+      if (hoursSinceCreation > 24) {
+        return true;
+      }
+    }
+    return false;
+  });
 
   // Step 1: User clicks Purchase - opens dietitian selection modal
   const handlePurchaseClick = (pkg: typeof MEAL_PLAN_PACKAGES[0]) => {
@@ -119,23 +243,39 @@ export default function UserMealPlanPage() {
 
   // Step 2: User selects dietitian and clicks "Go to Checkout" - opens payment modal
   const handleCheckout = (data: { dietitianId: string; dietitianName: string; packageName: string; packageId: string; price: number }) => {
-    setSelectedPurchase({
+    const purchase = {
       packageId: data.packageId,
       packageName: data.packageName,
       price: data.price,
       currency: selectedPackage?.currency || "NGN",
       dietitianId: data.dietitianId,
       dietitianName: data.dietitianName,
-    });
+    };
+    
+    setSelectedPurchase(purchase);
+    
+    // Store purchase in localStorage before redirect (for payment callback)
+    localStorage.setItem("pendingMealPlanPurchase", JSON.stringify(purchase));
+    
     setIsPurchaseModalOpen(false);
     setIsPaymentModalOpen(true);
   };
 
   // Step 3: Payment success - create session request for the dietitian
   const handlePaymentSuccess = async (paymentData: any) => {
-    if (!selectedPurchase) return;
+    if (!selectedPurchase) {
+      console.error("No purchase selected");
+      return;
+    }
 
     try {
+      console.log("Creating session request after payment:", {
+        dietitianId: selectedPurchase.dietitianId,
+        packageName: selectedPurchase.packageName,
+        price: selectedPurchase.price,
+        paymentReference: paymentData?.reference,
+      });
+
       // Create a session request for the meal plan
       const response = await fetch("/api/user/session-requests", {
         method: "POST",
@@ -145,22 +285,40 @@ export default function UserMealPlanPage() {
         },
         body: JSON.stringify({
           dietitianId: selectedPurchase.dietitianId,
-          requestType: "MEAL_PLAN",
+          requestType: "MEAL_PLAN" as const,
           mealPlanType: selectedPurchase.packageName,
           notes: `Meal Plan Purchase: ${selectedPurchase.packageName}`,
           paymentData,
+          price: selectedPurchase.price,
+          currency: selectedPurchase.currency,
         }),
       });
 
+      const responseData = await response.json();
+      
       if (response.ok) {
+        console.log("✅ Session request created successfully:", responseData);
         setIsPaymentModalOpen(false);
         setSelectedPackage(null);
         setSelectedPurchase(null);
         // Refresh session requests to show the new pending plan
         window.location.reload();
+      } else {
+        console.error("❌ Failed to create session request:", {
+          status: response.status,
+          error: responseData,
+        });
+        alert(
+          `Failed to create session request: ${responseData.error || responseData.message || "Unknown error"}\n\n` +
+          `Please check the console for details or contact support if the issue persists.`
+        );
       }
     } catch (err) {
-      console.error("Error creating meal plan request:", err);
+      console.error("❌ Error creating meal plan request:", err);
+      alert(
+        `Error creating meal plan request: ${err instanceof Error ? err.message : "Unknown error"}\n\n` +
+        `Your payment was successful, but we couldn't create the request. Please contact support.`
+      );
     }
   };
   return (
@@ -178,15 +336,15 @@ export default function UserMealPlanPage() {
         <div className="p-6 lg:p-8 pt-14 lg:pt-8">
           {/* Header Section */}
           <div className="mb-6">
-            <h1 className="text-xl lg:text-[15px] font-semibold text-[#f9fafb] mb-1">Meal Plans</h1>
+            <h1 className="text-xl lg:text-[15px] font-semibold text-[#f9fafb] mb-1">{pageTitle}</h1>
             <p className="text-[13px] text-[#9ca3af] mb-6">
-              Browse available meal plan packages and view your purchased plans.
+              {pageDescription}
             </p>
           </div>
 
-          {/* Pending Meal Plans Section */}
+          {/* Pending Section */}
           <div className="mb-8">
-            <h2 className="text-sm font-semibold text-[#f9fafb] mb-4">Pending Meal Plans</h2>
+            <h2 className="text-sm font-semibold text-[#f9fafb] mb-4">{pendingSectionTitle}</h2>
             {pendingPlans.length > 0 ? (
               <div className="space-y-4">
                 {pendingPlans.map((plan) => (
@@ -207,17 +365,22 @@ export default function UserMealPlanPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {plan.status === "paid-pending" ? (
-                          <>
-                            <Clock className="h-4 w-4 text-yellow-400" />
-                            <span className="text-sm text-yellow-400">Paid & Pending</span>
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="h-4 w-4 text-[#9ca3af]" />
-                            <span className="text-sm text-[#9ca3af]">Pending</span>
-                          </>
-                        )}
+                        <Button
+                          onClick={() => {
+                            if (plan.hasPdf && plan.pdfUrl) {
+                              window.open(plan.pdfUrl, '_blank');
+                            }
+                          }}
+                          disabled={!plan.hasPdf}
+                          className={`px-4 py-2 text-sm ${
+                            plan.hasPdf
+                              ? "bg-white hover:bg-gray-100 text-black"
+                              : "bg-[#262626] text-[#6b7280] cursor-not-allowed"
+                          }`}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          View PDF
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -226,7 +389,7 @@ export default function UserMealPlanPage() {
             ) : (
               <div className="text-center py-12 border border-[#262626] rounded-lg">
                 <Clock className="h-12 w-12 text-[#9ca3af] mx-auto mb-4" />
-                <p className="text-sm text-[#9ca3af]">No pending meal plans.</p>
+                <p className="text-sm text-[#9ca3af]">No pending assessment tests.</p>
               </div>
             )}
           </div>
@@ -234,7 +397,7 @@ export default function UserMealPlanPage() {
 
           {/* Available Packages Section */}
           <div className="mb-8">
-            <h2 className="text-sm font-semibold text-[#f9fafb] mb-4">Available Meal Plans</h2>
+            <h2 className="text-sm font-semibold text-[#f9fafb] mb-4">{availableSectionTitle}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {MEAL_PLAN_PACKAGES.map((pkg) => (
                 <div
@@ -268,11 +431,12 @@ export default function UserMealPlanPage() {
             </div>
           </div>
 
-          {/* Received Meal Plans Section */}
+          {/* Received Assessment Tests Section */}
           <div className="mb-6">
-            <h2 className="text-sm font-semibold text-[#f9fafb] mb-4">Received Meal Plans</h2>
-            {receivedMealPlans.length > 0 ? (
+            <h2 className="text-sm font-semibold text-[#f9fafb] mb-4">{receivedSectionTitle}</h2>
+            {(receivedMealPlans.length > 0 || receivedFromRequests.length > 0) ? (
               <div className="space-y-4">
+                {/* Meal plans from meal_plans table */}
                 {receivedMealPlans.map((plan) => (
                   <div
                     key={plan.id}
@@ -324,7 +488,7 @@ export default function UserMealPlanPage() {
             ) : (
               <div className="text-center py-12 border border-[#262626] rounded-lg">
                 <FileText className="h-12 w-12 text-[#9ca3af] mx-auto mb-4" />
-                <p className="text-sm text-[#9ca3af]">No meal plans received yet.</p>
+                <p className="text-sm text-[#9ca3af]">No assessment tests received yet.</p>
               </div>
             )}
           </div>

@@ -3,7 +3,7 @@ import { createAdminClientServer } from "@/lib/supabase/server";
 import { getCurrentUserFromRequest } from "@/lib/auth-helpers";
 
 // Helper function to fetch bookings
-async function fetchBookings(userId: string, role: "USER" | "DIETITIAN") {
+async function fetchBookings(userId: string, role: "USER" | "DIETITIAN" | "THERAPIST") {
   const supabaseAdmin = createAdminClientServer();
   
   let query = supabaseAdmin
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    const role = (dbUser?.role === "DIETITIAN" ? "DIETITIAN" : "USER") as "USER" | "DIETITIAN";
+    const role = ((dbUser?.role === "DIETITIAN" || dbUser?.role === "THERAPIST") ? (dbUser.role as "DIETITIAN" | "THERAPIST") : "USER") as "USER" | "DIETITIAN" | "THERAPIST";
 
     // Set SSE headers
     const headers = new Headers({

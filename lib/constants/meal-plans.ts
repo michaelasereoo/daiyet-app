@@ -9,6 +9,13 @@ export interface MealPlanPackage {
 
 export const MEAL_PLAN_PACKAGES: MealPlanPackage[] = [
   {
+    id: "test",
+    name: "Test Meal Plan",
+    description: "Test meal plan for testing the purchase flow",
+    price: 100,
+    currency: "NGN",
+  },
+  {
     id: "7-day",
     name: "7-day meal plan",
     description: "A comprehensive 7-day meal plan tailored to your dietary needs",

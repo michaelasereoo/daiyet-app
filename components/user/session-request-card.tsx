@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, FileText, Clock, CheckCircle, XCircle, MessageSquare } from "lucide-react";
+import { Calendar, FileText, Clock, CheckCircle, XCircle, MessageSquare, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -30,6 +30,13 @@ interface SessionRequest {
   };
   originalBookingId?: string;
   createdAt: string;
+  mealPlan?: {
+    id: string;
+    fileUrl: string | null;
+    status: string;
+    sentAt: string | null;
+    hasPdf: boolean;
+  } | null;
 }
 
 interface SessionRequestCardProps {
@@ -40,6 +47,8 @@ interface SessionRequestCardProps {
 
 const getMealPlanName = (type: string) => {
   const mealPlans: Record<string, string> = {
+    "test": "Test Meal Plan",
+    "Test Meal Plan": "Test Meal Plan",
     "7-day": "7-day meal plan",
     "14-day": "14-day meal plan",
     "1-month": "1 month meal plan",
@@ -159,19 +168,42 @@ export function SessionRequestCard({ request, onApprove, onReject }: SessionRequ
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 ml-4">
-          <Button
-            onClick={() => onApprove(request)}
-            className="bg-white hover:bg-gray-100 text-black px-4 py-2 text-sm"
-          >
-            {getApproveButtonLabel()}
-          </Button>
-          <Button
-            onClick={() => onReject(request.id)}
-            variant="outline"
-            className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#262626] px-4 py-2 text-sm"
-          >
-            Reject
-          </Button>
+          {request.requestType === "MEAL_PLAN" ? (
+            // For user-purchased meal plans, show View PDF button (disabled until dietitian sends)
+            <Button
+              onClick={() => {
+                if (request.mealPlan?.fileUrl) {
+                  window.open(request.mealPlan.fileUrl, '_blank');
+                }
+              }}
+              disabled={!request.mealPlan?.hasPdf}
+              className={`px-4 py-2 text-sm ${
+                request.mealPlan?.hasPdf
+                  ? "bg-white hover:bg-gray-100 text-black"
+                  : "bg-[#262626] text-[#6b7280] cursor-not-allowed"
+              }`}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              View PDF
+            </Button>
+          ) : (
+            // For consultation/reschedule requests, show Approve/Reject
+            <>
+              <Button
+                onClick={() => onApprove(request)}
+                className="bg-white hover:bg-gray-100 text-black px-4 py-2 text-sm"
+              >
+                {getApproveButtonLabel()}
+              </Button>
+              <Button
+                onClick={() => onReject(request.id)}
+                variant="outline"
+                className="bg-transparent border-[#262626] text-[#f9fafb] hover:bg-[#262626] px-4 py-2 text-sm"
+              >
+                Reject
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>

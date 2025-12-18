@@ -59,7 +59,7 @@ const userNavigation: NavItem[] = [
   { name: "Dashboard", href: "/user-dashboard", icon: LayoutDashboard },
   { name: "Book a Call", href: "/user-dashboard/book-a-call", icon: Phone },
   { name: "Meetings", href: "/user-dashboard/upcoming-meetings", icon: Calendar },
-  { name: "Meal Plan", href: "/user-dashboard/meal-plan", icon: FileText },
+  { name: "Assessment Tests", href: "/user-dashboard/meal-plan", icon: FileText },
 ];
 
 export function UserBottomNavigation() {

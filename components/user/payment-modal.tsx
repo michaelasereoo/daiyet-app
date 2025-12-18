@@ -65,7 +65,17 @@ export function PaymentModal({
       try {
         const { createBrowserClient } = await import("@/lib/supabase/client");
         const supabase = createBrowserClient();
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        // Add timeout to prevent hanging on auth.getSession in slow or unstable environments
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Session fetch timed out")), 10000)
+        );
+
+        const { data: { session }, error: sessionError } = await Promise.race([
+          sessionPromise,
+          timeoutPromise,
+        ]) as any;
 
         if (sessionError || !session?.user) {
           // If session fetch fails but we have props, use props
@@ -76,7 +86,9 @@ export function PaymentModal({
             setIsLoadingUserData(false);
             return;
           }
-          setError("Please ensure you are logged in to complete payment.");
+          // If we can't get session and have no props, don't block payment here.
+          // Server-side Paystack initialize route will still enforce real auth.
+          setError(null);
           setIsLoadingUserData(false);
           return;
         }
@@ -115,7 +127,8 @@ export function PaymentModal({
           setFinalName(userName || "User");
           setError(null);
         } else {
-          setError("Unable to retrieve user information. Please ensure you are logged in.");
+          // Don't surface an auth error here; let the server auth check handle it
+          setError(null);
         }
       } finally {
         setIsLoadingUserData(false);
@@ -132,19 +145,9 @@ export function PaymentModal({
     let emailToUse = finalEmail || userEmail;
     let nameToUse = finalName || userName;
 
-    // Final validation - ensure we have email
-    if (!isValidEmail(emailToUse)) {
-      setError("User email is required for payment. Please ensure you are logged in.");
-      return;
-    }
-
-    // At this point, emailToUse is guaranteed to be a valid non-empty string
-    const validEmail = emailToUse as string;
-
-    // Fallback name to email if no name available
-    if (!nameToUse || nameToUse.trim().length === 0) {
-      nameToUse = validEmail.split("@")[0] || "User";
-    }
+    // We no longer block payment on client-side email resolution.
+    // The server-side Paystack initialize route reads the authenticated user
+    // from cookies and will fail with 401 if the user is not actually logged in.
 
     try {
       setIsProcessing(true);
@@ -257,7 +260,9 @@ export function PaymentModal({
             </Button>
             <Button
               onClick={handlePayment}
-              disabled={isProcessing || isLoadingUserData || !finalEmail}
+              // Do not block payment button based on email/session loading;
+              // server-side auth will still guard the Paystack init route.
+              disabled={isProcessing}
               className="bg-white hover:bg-gray-100 text-black px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isProcessing ? (

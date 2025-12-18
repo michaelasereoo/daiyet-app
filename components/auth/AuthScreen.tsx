@@ -25,20 +25,24 @@ export function AuthScreen({ title, subtitle, redirectPath = "/user-dashboard", 
     try {
       const supabase = createComponentClient();
 
-      // Always prefer NEXT_PUBLIC_SITE_URL if set (for production), otherwise use window.location.origin
-      // This ensures production always uses the correct URL even if accessed via different domains
-      // Trim any whitespace to prevent URL parsing errors
-      const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).trim();
+      // ALWAYS use the current browser origin for OAuth redirects
+      // This ensures localhost stays on localhost, production stays on production
+      const currentOrigin = window.location.origin;
       
-      // FIXED: Let Supabase handle state - don't use custom state
-      // Add source parameter to track where OAuth was initiated
+      // Build callback URL using the current origin
       const callbackUrl = source 
-        ? `${siteUrl}/auth/callback?source=${encodeURIComponent(source)}`
-        : `${siteUrl}/auth/callback`;
+        ? `${currentOrigin}/auth/callback?source=${encodeURIComponent(source)}`
+        : `${currentOrigin}/auth/callback`;
       
       // Log for debugging
       console.log('🔐 OAuth redirect URL:', callbackUrl);
-      console.log('🌐 Site URL:', siteUrl);
+      console.log('🌐 Current Origin:', currentOrigin);
+      console.log('🔍 NEXT_PUBLIC_SITE_URL:', process.env.NEXT_PUBLIC_SITE_URL);
+      
+      // Alert for visual confirmation during testing
+      if (currentOrigin.includes('localhost')) {
+        console.log('✅ Localhost detected - using:', callbackUrl);
+      }
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",

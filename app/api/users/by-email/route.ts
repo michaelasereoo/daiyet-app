@@ -19,10 +19,13 @@ export async function POST(request: NextRequest) {
 
     const supabaseAdmin = createAdminClientServer();
 
+    // Normalize emails to lowercase for matching
+    const normalizedEmails = emails.map((e: string) => e.toLowerCase().trim());
+    
     const { data: users, error } = await supabaseAdmin
       .from("users")
       .select("id, email, name")
-      .in("email", emails);
+      .in("email", normalizedEmails);
 
     if (error) {
       console.error("Error fetching users by email:", error);

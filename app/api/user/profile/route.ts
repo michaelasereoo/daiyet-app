@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     const { data: userProfile, error } = await supabaseAdmin
       .from("users")
-      .select("id, name, email, age, occupation, medical_condition, monthly_food_budget")
+      .select("id, name, email, age, occupation, medical_condition, monthly_food_budget, signup_source, gender, phone, city, state")
       .eq("id", user.id)
       .single();
 
@@ -51,7 +51,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { age, occupation, medical_condition, monthly_food_budget } = body;
+    const { age, occupation, medical_condition, monthly_food_budget, gender, phone, city, state } = body;
 
     const supabaseAdmin = createAdminClientServer();
 
@@ -60,6 +60,10 @@ export async function PUT(request: NextRequest) {
     if (occupation !== undefined) updateData.occupation = occupation;
     if (medical_condition !== undefined) updateData.medical_condition = medical_condition;
     if (monthly_food_budget !== undefined) updateData.monthly_food_budget = monthly_food_budget;
+    if (gender !== undefined) updateData.gender = gender;
+    if (phone !== undefined) updateData.phone = phone;
+    if (city !== undefined) updateData.city = city;
+    if (state !== undefined) updateData.state = state;
 
     const { data: updatedProfile, error } = await supabaseAdmin
       .from("users")

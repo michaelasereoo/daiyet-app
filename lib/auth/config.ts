@@ -41,6 +41,7 @@ export const authConfig = {
   // Role-based redirects
   redirects: {
     DIETITIAN: '/dashboard',
+    THERAPIST: '/therapist-dashboard',
     USER: '/user-dashboard',
     ADMIN: '/admin',
     default: '/',

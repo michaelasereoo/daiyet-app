@@ -19,13 +19,17 @@ import {
   X
 } from "lucide-react";
 
-const navigation = [
-  { name: "Dashboard", href: "/user-dashboard", icon: LayoutDashboard },
-  { name: "Book a Call", href: "/user-dashboard/book-a-call", icon: Phone },
-  { name: "Upcoming Meetings", href: "/user-dashboard/upcoming-meetings", icon: Calendar },
-  { name: "Meal Plan", href: "/user-dashboard/meal-plan", icon: FileText },
-  { name: "Profile Settings", href: "/user-dashboard/profile-settings", icon: User },
-];
+// Navigation will be created dynamically based on signup_source
+const getNavigation = (signupSource: string | null) => {
+  const mealPlanLabel = signupSource === "therapy" ? "Assessment Tests" : "Meal Plans";
+  return [
+    { name: "Dashboard", href: "/user-dashboard", icon: LayoutDashboard },
+    { name: "Book a Call", href: "/user-dashboard/book-a-call", icon: Phone },
+    { name: "Upcoming Meetings", href: "/user-dashboard/upcoming-meetings", icon: Calendar },
+    { name: mealPlanLabel, href: "/user-dashboard/meal-plan", icon: FileText },
+    { name: "Profile Settings", href: "/user-dashboard/profile-settings", icon: User },
+  ];
+};
 
 interface UserDashboardSidebarProps {
   isOpen?: boolean;
@@ -41,8 +45,39 @@ const USER_PROFILE_CACHE_KEY = "user_dashboard_profile";
 let cachedProfile: { name: string; image: string | null } | null = null;
 let hasInitializedThisSession = false;
 
+// Component to show "Diet" or "Therapy" based on signup_source
+function UserDashboardLogoText() {
+  const [signupSource, setSignupSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch signup_source to determine if user came from dietitian or therapy route
+    const fetchSignupSource = async () => {
+      try {
+        const response = await fetch("/api/user/profile", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.profile?.signup_source) {
+            setSignupSource(data.profile.signup_source);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching signup source:", err);
+      }
+    };
+    fetchSignupSource();
+  }, []);
+
+  // Show "Therapy" only if signup_source is "therapy", otherwise show "Diet"
+  const logoText = signupSource === "therapy" ? "Therapy" : "Diet";
+
+  return <span className="text-xs font-medium text-white/60">{logoText}</span>;
+}
+
 export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfile }: UserDashboardSidebarProps) {
   const pathname = usePathname();
+  const [signupSource, setSignupSource] = useState<string | null>(null);
   
   // Initialize with module cache first (instant, no flash on navigation)
   // Fall back to initialUserProfile prop if provided
@@ -51,6 +86,29 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
   );
   const [isLoading, setIsLoading] = useState(!cachedProfile && !initialUserProfile);
   const [supabase, setSupabase] = useState<ReturnType<typeof createBrowserClient> | null>(null);
+
+  // Fetch signup_source for navigation label
+  useEffect(() => {
+    const fetchSignupSource = async () => {
+      try {
+        const response = await fetch("/api/user/profile", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.profile?.signup_source) {
+            setSignupSource(data.profile.signup_source);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching signup source:", err);
+      }
+    };
+    fetchSignupSource();
+  }, []);
+
+  // Get navigation items based on signup_source
+  const navigation = getNavigation(signupSource);
 
   // Create Supabase client instance only in browser
   useEffect(() => {
@@ -377,7 +435,7 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
       {/* Top Section with Logo and Search */}
           <div className="p-4 pb-3 flex-shrink-0 relative">
             <div className="flex items-center justify-between">
-              <Link href="/" className="flex items-center">
+              <Link href="/" className="flex items-center gap-2">
                 <Image
                   src="/daiyet logo.svg"
                   alt="Daiyet"
@@ -385,6 +443,7 @@ export function UserDashboardSidebar({ isOpen = false, onClose, initialUserProfi
                   height={32}
                   className="h-8 w-auto"
                 />
+                <UserDashboardLogoText />
               </Link>
               <button className="text-[#D4D4D4] hover:text-[#f9fafb]">
                 <Search className="h-5 w-5" />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 interface UseOptimizedAvailabilityOptions {
   dietitianId: string;
@@ -22,6 +22,16 @@ export function useOptimizedAvailability({
   const [data, setData] = useState(initialData);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Normalize date deps to stable strings to avoid re-running effects on every render
+  const startKey = useMemo(
+    () => (startDate ? startDate.toISOString().split('T')[0] : undefined),
+    [startDate]
+  );
+  const endKey = useMemo(
+    () => (endDate ? endDate.toISOString().split('T')[0] : undefined),
+    [endDate]
+  );
   
   // Smart polling state
   const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,7 +55,7 @@ export function useOptimizedAvailability({
   }, []);
 
   const fetchAvailability = useCallback(async (skipCache = false) => {
-    if (!enabled || !dietitianId || !startDate || !endDate) return;
+    if (!enabled || !dietitianId || !startKey || !endKey) return;
     
     const now = Date.now();
     // Don't fetch more than once per 10 seconds
@@ -84,8 +94,8 @@ export function useOptimizedAvailability({
       // Build query params
       const params = new URLSearchParams({
         dietitianId,
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0],
+        startDate: startKey,
+        endDate: endKey,
         duration: durationMinutes.toString(),
       });
       
@@ -146,7 +156,7 @@ export function useOptimizedAvailability({
     } finally {
       setIsLoading(false);
     }
-  }, [dietitianId, eventTypeId, startDate, endDate, durationMinutes, enabled]);
+  }, [dietitianId, eventTypeId, startKey, endKey, durationMinutes, enabled]);
 
   // Tab visibility detection - only fetch when tab becomes visible after being hidden for a while
   useEffect(() => {
@@ -203,7 +213,7 @@ export function useOptimizedAvailability({
 
   // Smart polling setup - only poll when tab is visible
   useEffect(() => {
-    if (!enabled || !dietitianId || !startDate || !endDate) return;
+    if (!enabled || !dietitianId || !startKey || !endKey) return;
 
     const poll = () => {
       // Only poll if tab is visible
@@ -233,7 +243,7 @@ export function useOptimizedAvailability({
         clearTimeout(pollIntervalRef.current);
       }
     };
-  }, [dietitianId, eventTypeId, startDate, endDate, enabled]);
+  }, [dietitianId, eventTypeId, startKey, endKey, enabled]);
 
   return { data, isLoading, error, refetch: fetchAvailability };
 }

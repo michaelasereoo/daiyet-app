@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
     // Upsert payment record as pending (using admin client for RLS bypass)
     const adminClient = getAdminClient();
     if (adminClient) {
+      // Store metadata in payment record for callback routing
       await adminClient.from("payments").upsert(
         {
           paystack_ref: reference,
@@ -144,6 +145,7 @@ export async function POST(request: NextRequest) {
           amount,
           currency: "NGN",
           status: "PENDING",
+          metadata: metadata || {}, // Store metadata for callback routing
         },
         { onConflict: "paystack_ref" }
       );

@@ -5,9 +5,10 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   email_verified TIMESTAMPTZ,
   image TEXT,
-  role TEXT DEFAULT 'USER' CHECK (role IN ('USER', 'DIETITIAN', 'ADMIN')),
+  role TEXT DEFAULT 'USER' CHECK (role IN ('USER', 'DIETITIAN', 'ADMIN', 'THERAPIST')),
   is_admin BOOLEAN DEFAULT false,
   bio TEXT,
+  signup_source TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

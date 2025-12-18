@@ -80,6 +80,14 @@
       "namedRegex": "^/api/bookings/(?<nxtPid>[^/]+?)/generate\\-meet\\-link(?:/)?$"
     },
     {
+      "page": "/api/dietitians/by-slug/[slug]",
+      "regex": "^/api/dietitians/by\\-slug/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/api/dietitians/by\\-slug/(?<nxtPslug>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/dietitians/[id]",
       "regex": "^/api/dietitians/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -158,6 +166,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/dashboard/event\\-types/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/Dietitian/[slug]",
+      "regex": "^/Dietitian/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^/Dietitian/(?<nxtPslug>[^/]+?)(?:/)?$"
     }
   ],
   "staticRoutes": [
@@ -376,6 +392,18 @@
       "regex": "^/api/debug/cookies(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/debug/cookies(?:/)?$"
+    },
+    {
+      "page": "/api/debug/dns",
+      "regex": "^/api/debug/dns(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/dns(?:/)?$"
+    },
+    {
+      "page": "/api/debug/supabase",
+      "regex": "^/api/debug/supabase(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/supabase(?:/)?$"
     },
     {
       "page": "/api/debug/timeslots",

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClientServer } from "@/lib/supabase/server";
 import { getCurrentUserFromRequest } from "@/lib/auth-helpers";
-import { createGoogleMeetLinkOnly } from "@/lib/google-calendar";
+import { createCalendarEventWithMeet } from "@/lib/google-calendar";
 
 /**
  * POST /api/bookings/[id]/generate-meet-link
@@ -22,10 +22,14 @@ export async function POST(
     const { id } = await Promise.resolve(params);
     const supabaseAdmin = createAdminClientServer();
 
-    // Get booking details
+    // Get booking details with user and dietitian emails
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from("bookings")
-      .select("*")
+      .select(`
+        *,
+        user:users!bookings_user_id_fkey ( id, email, name ),
+        dietitian:users!bookings_dietitian_id_fkey ( id, email, name )
+      `)
       .eq("id", id)
       .single();
 
@@ -36,13 +40,14 @@ export async function POST(
       );
     }
 
-    // Verify user has access (dietitian or admin only - not regular users)
+    // Verify user has access
     const isDietitian = booking.dietitian_id === currentUser.id;
+    const isUser = booking.user_id === currentUser.id;
     const isAdmin = currentUser.role === "ADMIN" || currentUser.is_admin;
 
-    if (!isDietitian && !isAdmin) {
+    if (!isDietitian && !isUser && !isAdmin) {
       return NextResponse.json(
-        { error: "Forbidden: Only dietitians and admins can generate meeting links" },
+        { error: "Forbidden: Only booking user, dietitian or admin can generate meeting links" },
         { status: 403 }
       );
     }
@@ -66,17 +71,25 @@ export async function POST(
       );
     }
 
-    // Generate Google Meet link
+    // Generate Google Meet link via calendar event (with attendee emails)
     let meetLink = "";
+    const attendeeEmails = [
+      booking.user?.email,
+      booking.dietitian?.email,
+    ].filter(Boolean) as string[];
+
     try {
-      meetLink = await createGoogleMeetLinkOnly(
+      const { meetLink: link } = await createCalendarEventWithMeet(
         booking.dietitian_id,
         {
           summary: booking.title || "Consultation Session",
+          description: booking.description || "",
           startTime: booking.start_time,
           endTime: booking.end_time,
+          attendeeEmails,
         }
       );
+      meetLink = link;
     } catch (error: any) {
       console.error("Failed to create Google Meet link:", error);
       

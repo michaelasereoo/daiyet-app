@@ -86,8 +86,9 @@ export function AuthProvider({ children, initialProfile }: AuthProviderProps) {
   // This prevents any race conditions or edge cases
   useEffect(() => {
     const currentPathname = pathname || '/';
-    const publicRoutes = ['/login', '/signup', '/', '/dietitian-login', '/admin-login', '/dietitian-enrollment'];
-    const isPublicRoute = publicRoutes.some(route => currentPathname === route || currentPathname.startsWith(route));
+    const publicRoutes = ['/login', '/signup', '/dietitian-login', '/admin-login', '/dietitian-enrollment', '/therapist-enrollment'];
+    // Check exact match for root, or exact/starts with for other routes
+    const isPublicRoute = currentPathname === '/' || publicRoutes.some(route => currentPathname === route || currentPathname.startsWith(route + '/'));
     
     if (isPublicRoute) {
       // Force loading to false immediately - this overrides any other state
@@ -99,8 +100,9 @@ export function AuthProvider({ children, initialProfile }: AuthProviderProps) {
     // CRITICAL: Check pathname FIRST and set loading to false immediately for public routes
     // This must happen before any other logic to prevent blocking
     const currentPathname = pathname || '/';
-    const publicRoutes = ['/login', '/signup', '/', '/dietitian-login', '/admin-login', '/dietitian-enrollment'];
-    const isPublicRoute = publicRoutes.some(route => currentPathname === route || currentPathname.startsWith(route));
+    const publicRoutes = ['/login', '/signup', '/dietitian-login', '/admin-login', '/dietitian-enrollment', '/therapist-enrollment'];
+    // Check exact match for root, or exact/starts with for other routes
+    const isPublicRoute = currentPathname === '/' || publicRoutes.some(route => currentPathname === route || currentPathname.startsWith(route + '/'));
     
     // For public routes, ALWAYS set loading to false immediately - no exceptions
     if (isPublicRoute) {
@@ -142,10 +144,20 @@ export function AuthProvider({ children, initialProfile }: AuthProviderProps) {
         let error = null;
         
         if (!isPublicRoute) {
-          // Only fetch session for protected routes
-          const result = await supabase.auth.getSession();
-          session = result.data?.session || null;
-          error = result.error || null;
+          // Only fetch session for protected routes - with timeout
+          try {
+            const sessionPromise = supabase.auth.getSession();
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("Session fetch timed out")), 5000)
+            );
+            const result = await Promise.race([sessionPromise, timeoutPromise]);
+            session = result.data?.session || null;
+            error = result.error || null;
+          } catch (timeoutError) {
+            console.warn("AuthProvider: Session fetch timed out, continuing without session");
+            session = null;
+            error = null;
+          }
         }
 
         if (error) {
@@ -366,7 +378,7 @@ export function AuthProvider({ children, initialProfile }: AuthProviderProps) {
         if (event === "SIGNED_OUT") {
           setIsLoading(false);
           // Don't redirect if on enrollment page - allow user to reconnect
-          if (pathname !== "/dietitian-enrollment") {
+          if (pathname !== "/dietitian-enrollment" && pathname !== "/therapist-enrollment") {
             router.push("/");
           }
         }
@@ -538,7 +550,7 @@ export function AuthProvider({ children, initialProfile }: AuthProviderProps) {
         localStorage.removeItem('user_profile');
       }
       // Don't redirect if on enrollment page - allow user to reconnect
-      if (pathname !== "/dietitian-enrollment") {
+      if (pathname !== "/dietitian-enrollment" && pathname !== "/therapist-enrollment") {
         router.push("/");
       }
     } catch (error) {
@@ -569,7 +581,7 @@ export function AuthProvider({ children, initialProfile }: AuthProviderProps) {
   // This is the final line of defense against any loading state issues
   useEffect(() => {
     const currentPathname = pathname || '/';
-    const publicRoutes = ['/login', '/signup', '/', '/dietitian-login', '/admin-login', '/dietitian-enrollment'];
+    const publicRoutes = ['/login', '/signup', '/', '/dietitian-login', '/admin-login', '/dietitian-enrollment', '/therapist-enrollment'];
     const isPublicRoute = publicRoutes.some(route => currentPathname === route || currentPathname.startsWith(route));
     
     if (isPublicRoute) {

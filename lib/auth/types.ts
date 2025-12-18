@@ -8,7 +8,7 @@ import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 /**
  * User roles in the system
  */
-export type UserRole = 'USER' | 'DIETITIAN' | 'ADMIN';
+export type UserRole = 'USER' | 'DIETITIAN' | 'ADMIN' | 'THERAPIST';
 
 /**
  * Account status values
@@ -283,7 +283,7 @@ export interface MiddlewareAuthResult {
  * Type guard for UserRole
  */
 export function isUserRole(value: string): value is UserRole {
-  return ['USER', 'DIETITIAN', 'ADMIN'].includes(value);
+  return ['USER', 'DIETITIAN', 'ADMIN', 'THERAPIST'].includes(value);
 }
 
 /**
@@ -300,6 +300,7 @@ export function getRoleLevel(role: UserRole): number {
   const hierarchy: Record<UserRole, number> = {
     USER: 1,
     DIETITIAN: 2,
+    THERAPIST: 2,
     ADMIN: 3,
   };
   return hierarchy[role] || 0;

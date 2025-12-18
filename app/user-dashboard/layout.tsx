@@ -1,31 +1,57 @@
-"use client";
+import { createClient } from "@/lib/supabase/server/client";
+import { createAdminClientServer } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import UserDashboardLayoutClient from "./layout-client";
 
-import { usePathname } from "next/navigation";
-import Link from "next/link";
-import { Plus } from "lucide-react";
-
-export default function UserDashboardLayout({
+/**
+ * Server-side layout that enforces USER role for user dashboard
+ */
+export default async function UserDashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
-  const isBookACallPage = pathname === "/user-dashboard/book-a-call";
+  try {
+    // Fetch user and role server-side
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-  return (
-    <>
-      {children}
-      
-      {/* Floating Plus Button - Mobile only, show on all pages except book-a-call */}
-      {!isBookACallPage && (
-        <Link
-          href="/user-dashboard/book-a-call"
-          className="lg:hidden fixed bottom-20 right-4 z-40 w-14 h-14 bg-white hover:bg-gray-100 rounded-full flex items-center justify-center shadow-lg transition-colors"
-          aria-label="Book a Call"
-        >
-          <Plus className="h-6 w-6 text-black" strokeWidth={3} />
-        </Link>
-      )}
-    </>
-  );
+    if (authError || !user) {
+      redirect("/login");
+    }
+
+    // Fetch role from database
+    const supabaseAdmin = createAdminClientServer();
+    const { data: dbUser, error: userError } = await supabaseAdmin
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (userError || !dbUser) {
+      redirect("/login");
+    }
+
+    // Enforce USER role - redirect to appropriate dashboard if not USER
+    if (dbUser.role !== "USER") {
+      if (dbUser.role === "DIETITIAN") {
+        redirect("/dashboard");
+      } else if (dbUser.role === "THERAPIST") {
+        redirect("/therapist-dashboard");
+      } else if (dbUser.role === "ADMIN") {
+        redirect("/admin");
+      } else {
+        redirect("/");
+      }
+    }
+
+    // User has correct role, render the client layout
+    return <UserDashboardLayoutClient>{children}</UserDashboardLayoutClient>;
+  } catch (error) {
+    console.error("UserDashboardLayout: Error", error);
+    redirect("/login");
+  }
 }

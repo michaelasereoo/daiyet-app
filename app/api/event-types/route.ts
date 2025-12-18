@@ -44,15 +44,18 @@ export async function GET(request: NextRequest) {
         .eq("id", dietitianId)
         .single();
 
-      if (dietitianError || !targetDietitian || targetDietitian.role !== "DIETITIAN") {
-        console.error("EventTypes GET - Dietitian not found:", { dietitianId, error: dietitianError });
+      if (dietitianError || !targetDietitian || (targetDietitian.role !== "DIETITIAN" && targetDietitian.role !== "THERAPIST")) {
+        console.error("EventTypes GET - Dietitian/Therapist not found:", { dietitianId, error: dietitianError });
         return NextResponse.json(
-          { error: "Dietitian not found" },
+          { error: "Dietitian/Therapist not found" },
           { status: 404 }
         );
       }
       
-      // Check if the authenticated user is the dietitian themselves
+      // Store the role for later use
+      const targetRole = targetDietitian.role as 'DIETITIAN' | 'THERAPIST';
+      
+      // Check if the authenticated user is the dietitian/therapist themselves
       // Wrap in try-catch to handle cases where auth fails (public access is still allowed)
       let currentUser = null;
       try {
@@ -61,20 +64,20 @@ export async function GET(request: NextRequest) {
         // Public access is allowed even if auth fails
         console.log("EventTypes GET - Auth check failed (public access allowed):", error);
       }
-      isOwnEventTypes = currentUser?.id === dietitianId && currentUser?.role === "DIETITIAN";
+      isOwnEventTypes = currentUser?.id === dietitianId && (currentUser?.role === "DIETITIAN" || currentUser?.role === "THERAPIST");
       console.log("EventTypes GET - Public access verified, isOwnEventTypes:", isOwnEventTypes);
     } else {
       // Private access: dietitian fetching their own event types (requires auth)
       console.log("EventTypes GET - Private access mode (no dietitianId param)");
       const currentUser = await getCurrentUserFromRequest(request);
       
-      if (!currentUser || currentUser.role !== "DIETITIAN") {
+      if (!currentUser || (currentUser.role !== "DIETITIAN" && currentUser.role !== "THERAPIST")) {
         console.error("EventTypes GET - Auth failed:", { 
           hasUser: !!currentUser, 
           role: currentUser?.role 
         });
         return NextResponse.json(
-          { error: "Forbidden: Dietitian access required" },
+          { error: "Forbidden: Therapist or Dietitian access required" },
           { status: 403 }
         );
       }
@@ -87,15 +90,33 @@ export async function GET(request: NextRequest) {
     // ✅ Use service layer for business logic
     // Service handles: atomic creation, filtering, error handling
     try {
+      // Determine user role
+      let userRole: 'DIETITIAN' | 'THERAPIST' | undefined;
+      if (requestedDietitianId) {
+        const supabaseAdmin = createAdminClientServer();
+        const { data: targetUser } = await supabaseAdmin
+          .from("users")
+          .select("role")
+          .eq("id", dietitianId)
+          .single();
+        userRole = targetUser?.role as 'DIETITIAN' | 'THERAPIST' | undefined;
+      } else {
+        // For private access, we already have the user from auth check
+        const currentUser = await getCurrentUserFromRequest(request);
+        userRole = currentUser?.role as 'DIETITIAN' | 'THERAPIST' | undefined;
+      }
+      
       console.log(`[API] Calling EventTypeService.getEventTypes with:`, {
         dietitianId,
         filter: filterType,
         isOwnEventTypes,
+        userRole,
       });
       
       const eventTypes = await EventTypeService.getEventTypes(dietitianId, {
         filter: filterType === 'book-a-call' ? 'book-a-call' : null,
         isOwnEventTypes,
+        userRole,
       });
       
       console.log(`[API] EventTypeService returned ${eventTypes.length} event types:`, 

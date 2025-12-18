@@ -20,20 +20,45 @@ export async function GET(request: NextRequest) {
       dietitian = await requireDietitianFromRequest(request);
       console.log("SessionRequest GET - Authenticated dietitian:", dietitian.id);
     } catch (authError: any) {
-      console.error("SessionRequest GET - Authentication error", {
-        error: authError?.message,
-        status: authError?.status,
-        url: request.url,
-        stack: authError?.stack,
-      });
-      const statusCode = authError?.status || (authError?.message?.includes("Unauthorized") ? 401 : 403);
-      return NextResponse.json(
-        { 
-          error: authError?.message || "Authentication failed",
-          details: authError?.message 
-        },
-        { status: statusCode }
-      );
+      // In dev mode, try to get dev user
+      if (process.env.NODE_ENV === 'development') {
+        const { getCurrentUserFromRequest } = await import("@/lib/auth-helpers");
+        const devUser = await getCurrentUserFromRequest(request);
+        if (devUser && devUser.role === 'DIETITIAN') {
+          dietitian = devUser;
+          console.log("SessionRequest GET - Using dev dietitian:", dietitian.id);
+        } else {
+          console.error("SessionRequest GET - Authentication error", {
+            error: authError?.message,
+            status: authError?.status,
+            url: request.url,
+            stack: authError?.stack,
+          });
+          const statusCode = authError?.status || (authError?.message?.includes("Unauthorized") ? 401 : 403);
+          return NextResponse.json(
+            { 
+              error: authError?.message || "Authentication failed",
+              details: authError?.message 
+            },
+            { status: statusCode }
+          );
+        }
+      } else {
+        console.error("SessionRequest GET - Authentication error", {
+          error: authError?.message,
+          status: authError?.status,
+          url: request.url,
+          stack: authError?.stack,
+        });
+        const statusCode = authError?.status || (authError?.message?.includes("Unauthorized") ? 401 : 403);
+        return NextResponse.json(
+          { 
+            error: authError?.message || "Authentication failed",
+            details: authError?.message 
+          },
+          { status: statusCode }
+        );
+      }
     }
     
     const dietitianId = dietitian.id;
@@ -62,7 +87,7 @@ export async function GET(request: NextRequest) {
         original_booking_id,
         requested_date,
         created_at,
-        event_types:id (
+        event_types (
           id,
           title,
           price,
@@ -140,9 +165,120 @@ export async function GET(request: NextRequest) {
 
     console.log(`SessionRequest GET - Returning ${requests?.length || 0} session requests for dietitian ${dietitianId}`);
 
+    // Fetch meal plan data for MEAL_PLAN requests (similar to user endpoint)
+    let requestsWithMealPlans = requests || [];
+    try {
+      requestsWithMealPlans = await Promise.all(
+        (requests || []).map(async (req: any) => {
+          const result: any = { ...req };
+
+          // For meal plan requests, check if meal plan has been sent (has PDF)
+          if (req.request_type === "MEAL_PLAN") {
+            try {
+              console.log(`[SESSION REQUEST API] Fetching meal plan for request ${req.id}, status: ${req.status}`);
+              
+              // First try to find by session_request_id
+              let { data: mealPlan, error: mealPlanError } = await supabaseAdmin
+                .from("meal_plans")
+                .select("id, session_request_id, file_url, status, sent_at, user_id, dietitian_id")
+                .eq("session_request_id", req.id)
+                .maybeSingle();
+              
+              // If not found by session_request_id, try to find by dietitian_id and client_email
+              if (!mealPlan && !mealPlanError && req.status === "APPROVED") {
+                console.log(`[SESSION REQUEST API] Meal plan not found by session_request_id, trying alternative query...`);
+                // Get user ID from email
+                const { data: user } = await supabaseAdmin
+                  .from("users")
+                  .select("id")
+                  .eq("email", req.client_email.toLowerCase().trim())
+                  .maybeSingle();
+                
+                if (user) {
+                  const { data: altMealPlan, error: altError } = await supabaseAdmin
+                    .from("meal_plans")
+                    .select("id, session_request_id, file_url, status, sent_at, user_id, dietitian_id")
+                    .eq("dietitian_id", dietitianId)
+                    .eq("user_id", user.id)
+                    .eq("package_name", req.meal_plan_type || "")
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  
+                  if (altMealPlan && !altError) {
+                    console.log(`[SESSION REQUEST API] Found meal plan via alternative query:`, {
+                      id: altMealPlan.id,
+                      session_request_id: altMealPlan.session_request_id,
+                      matches: altMealPlan.session_request_id === req.id,
+                    });
+                    
+                    // If the meal plan has a null session_request_id, update it to link to this request
+                    if (!altMealPlan.session_request_id) {
+                      console.log(`[SESSION REQUEST API] Meal plan has null session_request_id, updating to link to request ${req.id}`);
+                      const { error: updateError } = await supabaseAdmin
+                        .from("meal_plans")
+                        .update({ session_request_id: req.id })
+                        .eq("id", altMealPlan.id);
+                      
+                      if (updateError) {
+                        console.error(`[SESSION REQUEST API] Error updating meal plan session_request_id:`, updateError);
+                      } else {
+                        console.log(`[SESSION REQUEST API] Successfully linked meal plan ${altMealPlan.id} to request ${req.id}`);
+                        altMealPlan.session_request_id = req.id;
+                      }
+                    }
+                    
+                    mealPlan = altMealPlan;
+                    mealPlanError = null;
+                  }
+                }
+              }
+              
+              if (mealPlanError) {
+                console.error(`[SESSION REQUEST API] Error fetching meal plan for request ${req.id}:`, {
+                  error: mealPlanError,
+                  code: mealPlanError.code,
+                  message: mealPlanError.message,
+                });
+                result.mealPlan = null;
+              } else if (mealPlan) {
+                console.log(`[SESSION REQUEST API] Found meal plan for request ${req.id}:`, {
+                  id: mealPlan.id,
+                  session_request_id: mealPlan.session_request_id,
+                  file_url: mealPlan.file_url,
+                  hasFileUrl: !!mealPlan.file_url,
+                  fileUrlLength: mealPlan.file_url?.length || 0,
+                  status: mealPlan.status,
+                });
+                result.mealPlan = {
+                  id: mealPlan.id,
+                  fileUrl: mealPlan.file_url,
+                  status: mealPlan.status,
+                  sentAt: mealPlan.sent_at,
+                  hasPdf: !!(mealPlan.file_url && mealPlan.file_url.trim() !== ''),
+                };
+              } else {
+                console.log(`[SESSION REQUEST API] No meal plan found for request ${req.id} (this is OK if not uploaded yet)`);
+                result.mealPlan = null;
+              }
+            } catch (err) {
+              console.error(`[SESSION REQUEST API] Exception fetching meal plan for request ${req.id}:`, err);
+              result.mealPlan = null;
+            }
+          }
+
+          return result;
+        })
+      );
+    } catch (err) {
+      console.error("Error fetching meal plans:", err);
+      // Continue with requests without meal plan data
+      requestsWithMealPlans = requests || [];
+    }
+
     // Transform the data to match the expected format
     try {
-    const formattedRequests = (requests || []).map((req: any) => {
+    const formattedRequests = (requestsWithMealPlans || []).map((req: any) => {
       const request: any = {
         id: req.id,
         requestType: req.request_type,
@@ -165,6 +301,8 @@ export async function GET(request: NextRequest) {
         request.mealPlanType = req.meal_plan_type;
         request.price = req.price;
         request.currency = req.currency;
+        // Always include mealPlan data (even if null) so frontend knows the state
+        request.mealPlan = req.mealPlan || null;
       } else if (req.request_type === "RESCHEDULE_REQUEST") {
         request.originalBookingId = req.original_booking_id;
       }
@@ -316,7 +454,7 @@ export async function POST(request: NextRequest) {
         currency,
         requested_date,
         created_at,
-        event_types:id (
+        event_types (
           id,
           title,
           price,

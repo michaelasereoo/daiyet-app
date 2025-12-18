@@ -112,9 +112,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (user.role !== "DIETITIAN") {
+    if (user.role !== "DIETITIAN" && user.role !== "THERAPIST") {
       return NextResponse.json(
-        { error: "Forbidden: Dietitian access required" },
+        { error: "Forbidden: Therapist or Dietitian access required" },
         { status: 403 }
       );
     }
