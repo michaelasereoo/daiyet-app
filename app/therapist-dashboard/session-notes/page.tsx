@@ -103,7 +103,7 @@ export default async function SessionNotesPage() {
       .eq("therapist_id", dbUser.id)
       .order("session_date", { ascending: false });
 
-    const notes = notesData && !notesError ? notesData : [];
+    const notes = (notesData && !notesError ? notesData : []) as any[];
 
     // Separate pending and completed notes
     const pendingNotes = notes.filter((note: any) => note.status === "PENDING");

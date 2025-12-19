@@ -44,7 +44,7 @@ export default async function DashboardLayout({
     const supabaseAdmin = createAdminClientServer();
     let { data: dbUser, error: userError } = await supabaseAdmin
       .from("users")
-      .select("name, image, role, id")
+      .select("name, image, role, id, auth_user_id")
       .eq("auth_user_id", user.id)
       .eq("role", "DIETITIAN")
       .maybeSingle();
@@ -53,7 +53,7 @@ export default async function DashboardLayout({
     if (userError || !dbUser) {
       const { data: userById, error: errorById } = await supabaseAdmin
         .from("users")
-        .select("name, image, role, id")
+        .select("name, image, role, id, auth_user_id")
         .eq("id", user.id)
         .maybeSingle();
 

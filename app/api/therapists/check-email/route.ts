@@ -50,6 +50,16 @@ export async function POST(request: NextRequest) {
     
     const isAlreadyDietitian = !!dietitianAccount;
 
+    // Check if they have a USER account (separate check)
+    const { data: userAccount } = await supabaseAdmin
+      .from("users")
+      .select("id, email, role")
+      .eq("email", email.toLowerCase().trim())
+      .eq("role", "USER")
+      .maybeSingle();
+    
+    const hasUserAccount = !!userAccount;
+
     return NextResponse.json(
       {
         exists: !!existingUser,
@@ -57,11 +67,12 @@ export async function POST(request: NextRequest) {
         canEnroll, // true if user doesn't exist or has role="USER"
         isAlreadyTherapist,
         isAlreadyDietitian,
+        hasUserAccount,
         message: isAlreadyTherapist 
           ? "This email is already registered as a therapist. Please login instead."
           : isAlreadyDietitian
           ? "This email is already registered as a dietitian."
-          : existingUser && existingUser.role === "USER"
+          : hasUserAccount
           ? "This email exists but can be upgraded to therapist."
           : null,
       },

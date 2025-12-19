@@ -234,7 +234,7 @@ export async function middleware(request: NextRequest) {
     if (targetRole) {
       const { data: userByAuthIdRole, error: errorByAuthIdRole } = await supabaseAdmin
         .from("users")
-        .select("role, email_verified, account_status, id")
+        .select("role, email_verified, account_status, id, auth_user_id")
         .eq("auth_user_id", session.user.id)
         .eq("role", targetRole)
         .maybeSingle();
@@ -250,7 +250,7 @@ export async function middleware(request: NextRequest) {
     if (!dbUser) {
       const { data: userById, error: errorById } = await supabaseAdmin
         .from("users")
-        .select("role, email_verified, account_status, id")
+        .select("role, email_verified, account_status, id, auth_user_id")
         .eq("id", session.user.id)
         .maybeSingle();
 

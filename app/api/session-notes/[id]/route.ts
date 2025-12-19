@@ -8,7 +8,7 @@ import { getCurrentUserFromRequest } from "@/lib/auth-helpers";
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const currentUser = await getCurrentUserFromRequest(request);
@@ -25,7 +25,7 @@ export async function PUT(
       );
     }
 
-    const noteId = params.id;
+    const { id: noteId } = await params;
     const body = await request.json();
     const {
       patient_complaint,
@@ -129,7 +129,7 @@ export async function PUT(
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const currentUser = await getCurrentUserFromRequest(request);
@@ -138,7 +138,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const noteId = params.id;
+    const { id: noteId } = await params;
     const supabaseAdmin = createAdminClientServer();
 
     const { data: note, error } = await supabaseAdmin
@@ -173,11 +173,14 @@ export async function GET(
       );
     }
 
+    // Type assertion for note to access properties
+    const noteData = note as any;
+
     // Verify access: therapist, client, or admin
     const hasAccess =
       currentUser.role === "ADMIN" ||
-      (currentUser.role === "THERAPIST" && note.therapist_id === currentUser.id) ||
-      (currentUser.role === "USER" && note.client_id === currentUser.id);
+      (currentUser.role === "THERAPIST" && noteData.therapist_id === currentUser.id) ||
+      (currentUser.role === "USER" && noteData.client_id === currentUser.id);
 
     if (!hasAccess) {
       return NextResponse.json(

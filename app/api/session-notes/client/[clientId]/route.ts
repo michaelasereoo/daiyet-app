@@ -9,7 +9,7 @@ import { getCurrentUserFromRequest } from "@/lib/auth-helpers";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
   try {
     const currentUser = await getCurrentUserFromRequest(request);
@@ -18,7 +18,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const clientId = params.clientId;
+    const { clientId } = await params;
     const supabaseAdmin = createAdminClientServer();
 
     let query = supabaseAdmin

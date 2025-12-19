@@ -1,3 +1,0 @@
-module.exports=[95593,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(32767);a.n(d("[project]/Desktop/daiyet-app/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},66570,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(32767);a.n(d("[project]/Desktop/daiyet-app/node_modules/next/dist/client/components/builtin/global-error.js"))},14205,a=>{"use strict";a.i(95593);var b=a.i(66570);a.n(b)}];
-
-//# sourceMappingURL=5f784_next_dist_client_components_builtin_global-error_ea76c684.js.map

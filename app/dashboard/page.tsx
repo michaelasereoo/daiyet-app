@@ -29,7 +29,7 @@ export default async function DashboardPage() {
     // 2. Check user role and account status - look up by (auth_user_id, role)
     let { data: dbUser, error: userError } = await supabaseAdmin
       .from("users")
-      .select("role, account_status, name, email, id")
+      .select("role, account_status, name, email, id, auth_user_id")
       .eq("auth_user_id", user.id)
       .eq("role", "DIETITIAN")
       .maybeSingle();
@@ -38,7 +38,7 @@ export default async function DashboardPage() {
     if (userError || !dbUser) {
       const { data: userById, error: errorById } = await supabaseAdmin
         .from("users")
-        .select("role, account_status, name, email, id")
+        .select("role, account_status, name, email, id, auth_user_id")
         .eq("id", user.id)
         .maybeSingle();
 

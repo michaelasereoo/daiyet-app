@@ -91,7 +91,7 @@ export default async function UserSessionNotesPage() {
       .eq("client_id", dbUser.id)
       .order("session_date", { ascending: false });
 
-    const notes = notesData && !notesError ? notesData : [];
+    const notes = (notesData && !notesError ? notesData : []) as any[];
 
     return <SessionNotesPageClient notes={notes} />;
   } catch (error) {

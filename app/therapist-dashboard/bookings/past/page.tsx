@@ -101,7 +101,7 @@ export default async function PastBookingsPage() {
           .from("session_notes")
           .select("id, booking_id, status")
           .in("booking_id", bookingIds)
-      : { data: null, error: null };
+      : { data: null };
 
     // Create a map of booking_id -> session_note
     const notesMap = new Map();

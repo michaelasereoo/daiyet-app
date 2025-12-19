@@ -96,7 +96,8 @@ export default function SessionNotesPageClient({
     setIsClientDetailsModalOpen(true);
   };
 
-  const handleNoteSaved = (updatedNote: SessionNote) => {
+  const handleNoteSaved = (updatedNote?: SessionNote) => {
+    if (!updatedNote) return;
     // Remove from pending, add to clients if completed
     setPendingNotes((prev) =>
       prev.filter((note) => note.id !== updatedNote.id)

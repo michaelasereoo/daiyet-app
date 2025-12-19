@@ -23,6 +23,9 @@ interface SessionNote {
   treatment_plan?: string;
   assignments?: string;
   status: "PENDING" | "COMPLETED";
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
 }
 
 interface FillNotesModalProps {
