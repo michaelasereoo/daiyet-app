@@ -535,7 +535,7 @@ export async function GET(request: NextRequest) {
           source,
           timestamp: new Date().toISOString(),
         });
-        const redirectTo = "/therapist-enrollment";
+        const redirectTo = "/therapist-enrollment?connected=true";
         const response = NextResponse.redirect(new URL(redirectTo, siteOrigin));
         response.headers.set("X-Auth-Status", "success");
         return response;
